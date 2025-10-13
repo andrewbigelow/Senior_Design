@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cognitive Overload Challenge</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(45deg, #1a1a2e, #16213e);
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .game-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .timer {
+            position: absolute;
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff4444;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 10px;
+            border: 2px solid #ff4444;
+            transition: all 0.5s ease;
+            z-index: 100;
+        }
+
+        .challenge-area {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 40px;
+            margin: 20px 0;
+            min-height: 400px;
+            position: relative;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .task-instruction {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+            color: #4CAF50;
+            background: rgba(76,175,80,0.2);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .item {
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+
+        .item:hover {
+            transform: scale(1.05);
+        }
+
+        .red-number {
+            background: #ff4444;
+            color: white;
+        }
+
+        .blue-number {
+            background: #4444ff;
+            color: white;
+        }
+
+        .green-word {
+            background: #44ff44;
+            color: black;
+        }
+
+        .distraction {
+            position: absolute;
+            font-size: 20px;
+            font-weight: bold;
+            animation: float 3s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .distraction.urgent {
+            color: #ff0000;
+            animation: blink 0.5s infinite;
+        }
+
+        .distraction.warning {
+            color: #ffaa00;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .input-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .answer-input {
+            font-size: 20px;
+            padding: 15px;
+            border: 3px solid #4CAF50;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.9);
+            color: black;
+            width: 100px;
+            text-align: center;
+            margin: 0 10px;
+        }
+
+        .submit-btn {
+            font-size: 18px;
+            padding: 15px 30px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin: 0 10px;
+        }
+
+        .submit-btn:hover {
+            background: #45a049;
+        }
+
+        .submit-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .feedback {
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .feedback.correct {
+            background: rgba(76,175,80,0.3);
+            color: #4CAF50;
+            border: 2px solid #4CAF50;
+        }
+
+        .feedback.incorrect {
+            background: rgba(244,67,54,0.3);
+            color: #f44336;
+            border: 2px solid #f44336;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            font-size: 16px;
+        }
+
+        .stat {
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .next-round-btn {
+            font-size: 16px;
+            padding: 12px 25px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .next-round-btn:hover {
+            background: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h1>Cognitive Overload Training</h1>
+            <p>Challenge: Handle multiple tasks while under pressure</p>
+        </div>
+
+        <div class="timer" id="timer">30</div>
+
+        <div class="challenge-area" id="challengeArea">
+            <div class="task-instruction" id="taskInstruction">
+                Count the RED NUMBERS (ignore everything else!)
+            </div>
+
+            <div class="content-grid" id="contentGrid">
+                <!-- Items will be generated here -->
+            </div>
+
+            <div class="input-section">
+                <input type="number" class="answer-input" id="answerInput" placeholder="?" min="0" max="50">
+                <button class="submit-btn" id="submitBtn" onclick="submitAnswer()">Submit Answer</button>
+            </div>
+
+            <div class="feedback" id="feedback" style="display: none;"></div>
+
+            <div class="stats">
+                <div class="stat">Round: <span id="roundNum">1</span></div>
+                <div class="stat">Correct: <span id="correctCount">0</span></div>
+                <div class="stat">Difficulty: <span id="difficultyLevel">Easy</span></div>
+            </div>
+
+            <button class="next-round-btn" id="nextRoundBtn" onclick="nextRound()" style="display: none;">Next Challenge</button>
+        </div>
+    </div>
+
+    <script>
+        let currentRound = 1;
+        let correctAnswers = 0;
+        let correctCount = 0;
+        let timeLeft = 30;
+        let gameActive = false;
+        let timerInterval;
+        let timerMoveInterval;
+        let distractionInterval;
+
+        const difficulties = [
+            { name: "Easy", items: 12, distractions: 2, timeLimit: 30 },
+            { name: "Medium", items: 20, distractions: 4, timeLimit: 25 },
+            { name: "Hard", items: 30, distractions: 6, timeLimit: 20 },
+            { name: "Expert", items: 40, distractions: 8, timeLimit: 15 },
+            { name: "Overload", items: 50, distractions: 12, timeLimit: 12 }
+        ];
+
+        function startRound() {
+            gameActive = true;
+            correctCount = 0;
+            const difficulty = difficulties[Math.min(currentRound - 1, difficulties.length - 1)];
+            timeLeft = difficulty.timeLimit;
+            
+            document.getElementById('difficultyLevel').textContent = difficulty.name;
+            document.getElementById('roundNum').textContent = currentRound;
+            document.getElementById('feedback').style.display = 'none';
+            document.getElementById('nextRoundBtn').style.display = 'none';
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('answerInput').value = '';
+            document.getElementById('answerInput').focus();
+
+            generateContent(difficulty);
+            startTimer();
+            startTimerMovement();
+            startDistractions(difficulty.distractions);
+        }
+
+        function generateContent(difficulty) {
+            const grid = document.getElementById('contentGrid');
+            grid.innerHTML = '';
+            
+            // Generate random items
+            for (let i = 0; i < difficulty.items; i++) {
+                const item = document.createElement('div');
+                item.className = 'item';
+                
+                const itemType = Math.random();
+                if (itemType < 0.3) {
+                    // Red number (what we're counting)
+                    item.className += ' red-number';
+                    item.textContent = Math.floor(Math.random() * 100) + 1;
+                    correctCount++;
+                } else if (itemType < 0.6) {
+                    // Blue number (distraction)
+                    item.className += ' blue-number';
+                    item.textContent = Math.floor(Math.random() * 100) + 1;
+                } else {
+                    // Green word (distraction)
+                    item.className += ' green-word';
+                    const words = ['URGENT', 'ERROR', 'WARNING', 'ALERT', 'CRITICAL', 'STOP', 'DANGER', 'HELP'];
+                    item.textContent = words[Math.floor(Math.random() * words.length)];
+                }
+                
+                grid.appendChild(item);
+            }
+        }
+
+        function startTimer() {
+            const timerElement = document.getElementById('timer');
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerElement.textContent = timeLeft;
+                
+                if (timeLeft <= 5) {
+                    timerElement.style.animation = 'blink 0.5s infinite';
+                }
+                
+                if (timeLeft <= 0) {
+                    endRound(false);
+                }
+            }, 1000);
+        }
+
+        function startTimerMovement() {
+            const timerElement = document.getElementById('timer');
+            timerMoveInterval = setInterval(() => {
+                if (!gameActive) return;
+                
+                const maxX = window.innerWidth - 150;
+                const maxY = window.innerHeight - 100;
+                
+                const newX = Math.random() * maxX;
+                const newY = Math.random() * maxY;
+                
+                timerElement.style.left = newX + 'px';
+                timerElement.style.top = newY + 'px';
+            }, 2000);
+        }
+
+        function startDistractions(count) {
+            const challengeArea = document.getElementById('challengeArea');
+            
+            distractionInterval = setInterval(() => {
+                if (!gameActive) return;
+                
+                // Remove old distractions
+                const oldDistractions = challengeArea.querySelectorAll('.distraction');
+                oldDistractions.forEach(d => d.remove());
+                
+                // Add new distractions
+                for (let i = 0; i < count; i++) {
+                    const distraction = document.createElement('div');
+                    distraction.className = 'distraction';
+                    
+                    const messages = [
+                        'PATIENT CRITICAL!', 'BP DROPPING!', 'HEART RATE 180!', 
+                        'OXYGEN LOW!', 'BLEEDING!', 'EMERGENCY!', 'STAT!',
+                        'CODE BLUE!', 'PRESSURE!', 'TIME CRITICAL!'
+                    ];
+                    
+                    distraction.textContent = messages[Math.floor(Math.random() * messages.length)];
+                    
+                    if (Math.random() < 0.3) {
+                        distraction.className += ' urgent';
+                    } else {
+                        distraction.className += ' warning';
+                    }
+                    
+                    distraction.style.left = Math.random() * 80 + 10 + '%';
+                    distraction.style.top = Math.random() * 60 + 20 + '%';
+                    
+                    challengeArea.appendChild(distraction);
+                    
+                    // Remove after 2 seconds
+                    setTimeout(() => distraction.remove(), 2000);
+                }
+            }, 1500);
+        }
+
+        function submitAnswer() {
+            if (!gameActive) return;
+            
+            const userAnswer = parseInt(document.getElementById('answerInput').value) || 0;
+            const isCorrect = userAnswer === correctCount;
+            
+            if (isCorrect) {
+                correctAnswers++;
+                document.getElementById('correctCount').textContent = correctAnswers;
+            }
+            
+            endRound(isCorrect);
+        }
+
+        function endRound(success) {
+            gameActive = false;
+            clearInterval(timerInterval);
+            clearInterval(timerMoveInterval);
+            clearInterval(distractionInterval);
+            
+            const feedback = document.getElementById('feedback');
+            feedback.style.display = 'block';
+            
+            if (success) {
+                feedback.className = 'feedback correct';
+                feedback.textContent = `🎉 Correct! You found all ${correctCount} red numbers!`;
+            } else {
+                feedback.className = 'feedback incorrect';
+                feedback.textContent = `❌ Incorrect. There were ${correctCount} red numbers, you answered ${document.getElementById('answerInput').value || 0}.`;
+            }
+            
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('nextRoundBtn').style.display = 'inline-block';
+            
+            // Remove distractions
+            const challengeArea = document.getElementById('challengeArea');
+            const distractions = challengeArea.querySelectorAll('.distraction');
+            distractions.forEach(d => d.remove());
+            
+            // Reset timer position and animation
+            const timerElement = document.getElementById('timer');
+            timerElement.style.animation = 'none';
+            timerElement.style.left = '20px';
+            timerElement.style.top = '20px';
+        }
+
+        function nextRound() {
+            currentRound++;
+            startRound();
+        }
+
+        // Handle Enter key for submission
+        document.getElementById('answerInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && gameActive) {
+                submitAnswer();
+            }
+        });
+
+        // Start the first round
+        startRound();
+    </script>
+</body>
+</html>
