@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cognitive Overload Challenge</title>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             margin: 0;
-            padding: 20px;
-            font-family: 'Arial', sans-serif;
-            background: linear-gradient(45deg, #1a1a2e, #16213e);
-            color: white;
+            padding: 24px;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+            background: white;
+            color: #111;
             overflow-x: hidden;
         }
 
@@ -20,9 +21,28 @@
             position: relative;
         }
 
+        /* UCSD logo in top-right */
+        #ucsdLogo {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            width: 120px;
+            height: auto;
+            object-fit: contain;
+            z-index: 120;
+        }
+
         .header {
             text-align: center;
             margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-family: 'EB Garamond', serif;
+            color: #000;
+            margin: 0 0 6px 0;
+            font-size: 36px;
+            font-weight: 700;
         }
 
         .timer {
@@ -37,6 +57,61 @@
             transition: all 0.5s ease;
             z-index: 100;
         }
+
+        /* Start screen overlay */
+        #startOverlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        #startCard {
+            max-width: 560px;
+            width: calc(100% - 80px);
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            text-align: center;
+            border: 1px solid #e6e6e6;
+        }
+
+        #startCard h2 {
+            margin: 0 0 8px 0;
+            font-family: 'EB Garamond', serif;
+            color: #000;
+            font-size: 28px;
+        }
+
+        #startCard p { color: #333; margin: 8px 0 12px 0; }
+
+        .team-info {
+            margin-top: 8px;
+            color: #444;
+            font-size: 13px;
+            line-height: 1.35;
+            text-align: left;
+            padding: 10px 14px;
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        #startBtn {
+            padding: 12px 22px;
+            background: #00457c;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #startBtn:hover { background: #00365f; }
 
         .challenge-area {
             background: rgba(255,255,255,0.1);
@@ -213,6 +288,25 @@
 </head>
 <body>
     <div class="game-container">
+        <!-- UCSD logo: replace the src with a local file or a canonical UCSD Bioengineering image URL -->
+    <img id="ucsdLogo" src="./bioengineering logo.jpg" alt="UCSD Bioengineering Logo" onerror="this.style.display='none'">
+
+        <!-- Start screen: blocks play until user clicks Start -->
+        <div id="startOverlay">
+            <div id="startCard">
+                    <h2>Cognitive Overload Training</h2>
+                    <p>Prepare to handle multiple tasks under time pressure. Click Start to begin the first challenge.</p>
+                    <div class="team-info">
+                        <strong>Group 6:</strong> Design of a Device for Task Saturation to Improve Safety and Communication in the Operating Room
+                        <br>
+                        Sophie Brown and Andrew Bigelow
+                        <br>
+                        <em>Mentor:</em> Dr. Nicolas Bauer, Anesthesia, UC San Diego Health
+                    </div>
+                    <div style="height:12px"></div>
+                    <button id="startBtn" onclick="startGame()">Start Game</button>
+            </div>
+        </div>
         <div class="header">
             <h1>Cognitive Overload Training</h1>
             <p>Challenge: Handle multiple tasks while under pressure</p>
@@ -247,7 +341,7 @@
     </div>
 
     <script>
-        let currentRound = 1;
+    let currentRound = 1;
         let correctAnswers = 0;
         let correctCount = 0;
         let timeLeft = 30;
@@ -282,6 +376,15 @@
             startTimer();
             startTimerMovement();
             startDistractions(difficulty.distractions);
+        }
+
+        // Called when user clicks the Start button on the start screen
+        function startGame() {
+            const overlay = document.getElementById('startOverlay');
+            if (overlay) overlay.style.display = 'none';
+            // reset rounds and UI if coming from a fresh start
+            currentRound = Math.max(1, currentRound);
+            startRound();
         }
 
         function generateContent(difficulty) {
@@ -444,8 +547,7 @@
             }
         });
 
-        // Start the first round
-        startRound();
+    // Don't auto-start the round; wait for user to click Start on the overlay.
     </script>
 </body>
 </html>
