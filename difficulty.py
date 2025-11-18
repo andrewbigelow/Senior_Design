@@ -50,7 +50,7 @@ def use_accents_by_difficulty(difficulty: int) -> bool:
         return False
 
 # Currently, number of words = difficulty * 20
-# Number of spaces between words = SOME CONSTANT
+# Number of spaces between words = number of words - (difficulty * 5)
 def audio_output_by_difficulty(difficulty: int) -> str:
     '''
     Determines the audio output file name based on difficulty level.
