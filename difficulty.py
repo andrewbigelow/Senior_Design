@@ -71,17 +71,19 @@ def audio_output_by_difficulty(difficulty: int) -> list[str]:
     else:
         task = random.choice(hard_tasks)
     
-    output_audio = [] * difficulty * 20
-    output_audio.append(task)
+    output_audio = []
 
-    words = word_generator.load_words('easy' if difficulty <=2 else 'medium' if difficulty ==3 else 'hard')
+    words = word_generator.load_words('easy' if difficulty <= 2 else 'medium' if difficulty == 3 else 'hard')
     selected_words = random.sample(words, difficulty * 20)
     output_audio.extend(selected_words)
-    output_audio = list(set(output_audio))  # Remove duplicates
 
-    spaces_locations = random.sample(range(len(output_audio)), difficulty * 5)
-    for index in spaces_locations:
-        output_audio.insert(index, ' ')
+    num_words = len(output_audio)
+    extra_spaces = max(0, num_words - (difficulty * 5))
+
+    # insert spaces at random positions between items
+    positions = random.sample(range(num_words + 1), extra_spaces)
+    for pos in sorted(positions, reverse=True):
+        output_audio.insert(pos, ' ')
 
     interspersed = []
     for i, item in enumerate(output_audio):
@@ -104,7 +106,8 @@ def audio_output_by_difficulty(difficulty: int) -> list[str]:
         while insert_index % 2 != 0:
             insert_index = random.randint(0, len(output_audio))
         output_audio[insert_index] = number
-
+    
+    output_audio.insert(0, task + '. ')
     return output_audio
 
 
