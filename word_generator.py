@@ -8,6 +8,9 @@ use word files:
     - easy_words.txt
     - medium_words.txt
     - hard_words.txt
+    - emergency_words.txt
+
+    emergency isn't a difficulty level, but a special set of words to be used in hard difficulty.
 '''
 def load_words(difficulty: str) -> list[str]:
     '''
@@ -18,7 +21,8 @@ def load_words(difficulty: str) -> list[str]:
     file_map = {
         'easy': 'easy_words.txt',
         'medium': 'medium_words.txt',
-        'hard': 'hard_words.txt'
+        'hard': 'hard_words.txt',
+        'emergency': 'emergency_words.txt'
     }
     
     if difficulty not in file_map:
@@ -37,3 +41,4 @@ if __name__ == "__main__":
     print("Easy:", load_words("easy")[:10])
     print("Medium:", load_words("medium")[:10])
     print("Hard:", load_words("hard")[:10])
+    print("Emergency:", load_words("emergency")[:10])

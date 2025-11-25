@@ -73,7 +73,15 @@ def audio_output_by_difficulty(difficulty: int) -> list[str]:
     
     output_audio = []
 
-    words = word_generator.load_words('easy' if difficulty <= 2 else 'medium' if difficulty == 3 else 'hard')
+    if difficulty <=2:
+        words = word_generator.load_words('easy')
+    elif difficulty ==3:
+        words = word_generator.load_words('medium')
+    else: 
+        hard_words = word_generator.load_words('hard')
+        emergency_words = word_generator.load_words('emergency')
+        words = hard_words + emergency_words
+        
     selected_words = random.sample(words, difficulty * 20)
     output_audio.extend(selected_words)
 
