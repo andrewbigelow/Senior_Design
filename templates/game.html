@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cognitive Overload Challenge</title>
+    <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 24px;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+            background: white;
+            color: #111;
+            overflow-x: hidden;
+        }
+
+        .game-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        /* UCSD logo in top-right */
+        #ucsdLogo {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            width: 120px;
+            height: auto;
+            object-fit: contain;
+            z-index: 120;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-family: 'EB Garamond', serif;
+            color: #000;
+            margin: 0 0 6px 0;
+            font-size: 36px;
+            font-weight: 700;
+        }
+
+        .timer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            color: #ff4444;
+            background: rgba(0,0,0,0.85);
+            padding: 12px 20px;
+            border-radius: 10px;
+            border: 3px solid #ff4444;
+            transition: color 0.3s ease;
+            z-index: 100;
+        }
+
+        /* Start screen overlay */
+        #startOverlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        #startCard {
+            max-width: 560px;
+            width: calc(100% - 80px);
+            background: #fff;
+            border-radius: 12px;
+            padding: 28px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            text-align: center;
+            border: 1px solid #e6e6e6;
+        }
+
+        #startCard h2 {
+            margin: 0 0 8px 0;
+            font-family: 'EB Garamond', serif;
+            color: #000;
+            font-size: 28px;
+        }
+
+        #startCard p { color: #333; margin: 8px 0 12px 0; }
+
+        .team-info {
+            margin-top: 8px;
+            color: #444;
+            font-size: 13px;
+            line-height: 1.35;
+            text-align: left;
+            padding: 10px 14px;
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 8px;
+        }
+
+        #startBtn {
+            padding: 12px 22px;
+            background: #00457c;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #startBtn:hover { background: #00365f; }
+
+        .challenge-area {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 40px;
+            margin: 20px 0;
+            min-height: 400px;
+            position: relative;
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .task-instruction {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+            color: #4CAF50;
+            background: rgba(76,175,80,0.2);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .item {
+            padding: 15px;
+            text-align: center;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+
+        .item:hover {
+            transform: scale(1.05);
+        }
+
+        .red-number {
+            background: #ff4444;
+            color: white;
+        }
+
+        .blue-number {
+            background: #4444ff;
+            color: white;
+        }
+
+        .green-word {
+            background: #44ff44;
+            color: black;
+        }
+
+        .input-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .answer-input {
+            font-size: 20px;
+            padding: 15px;
+            border: 3px solid #4CAF50;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.9);
+            color: black;
+            width: 120px;
+            text-align: center;
+            margin: 0 10px;
+        }
+        
+        .answer-input:focus {
+            outline: none;
+            border-color: #45a049;
+            box-shadow: 0 0 10px rgba(76,175,80,0.3);
+        }
+
+        .submit-btn {
+            font-size: 18px;
+            padding: 15px 30px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin: 0 10px;
+        }
+
+        .submit-btn:hover {
+            background: #45a049;
+        }
+
+        .submit-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .feedback {
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .feedback.correct {
+            background: rgba(76,175,80,0.3);
+            color: #4CAF50;
+            border: 2px solid #4CAF50;
+        }
+
+        .feedback.incorrect {
+            background: rgba(244,67,54,0.3);
+            color: #f44336;
+            border: 2px solid #f44336;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            font-size: 16px;
+        }
+
+        .stat {
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .next-round-btn {
+            font-size: 16px;
+            padding: 12px 25px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .next-round-btn:hover {
+            background: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <!-- UCSD logo: replace the src with a local file or a canonical UCSD Bioengineering image URL -->
+    <img id="ucsdLogo" src="./bioengineering logo.jpg" alt="UCSD Bioengineering Logo" onerror="this.style.display='none'">
+
+        <!-- Start screen: blocks play until user clicks Start -->
+        <div id="startOverlay">
+            <div id="startCard">
+                    <h2>Cognitive Overload Training</h2>
+                    <p>Handle both visual and audio tasks simultaneously. Difficulty increases gradually with each round. Click Start when ready.</p>
+                    <div class="team-info">
+                        <strong>Group 6:</strong> Design of a Device for Task Saturation to Improve Safety and Communication in the Operating Room
+                        <br>
+                        Sophie Brown and Andrew Bigelow
+                        <br>
+                        <em>Mentor:</em> Dr. Nicolas Bauer, Anesthesia, UC San Diego Health
+                    </div>
+                    <div style="height:12px"></div>
+                    <button id="startBtn" onclick="startGame()">Start Game</button>
+            </div>
+        </div>
+        <div class="header">
+            <h1>Cognitive Overload Training</h1>
+            <p>Challenge: Handle multiple tasks while under pressure</p>
+        </div>
+
+        <div class="timer" id="timer">30</div>
+
+        <div class="challenge-area" id="challengeArea">
+            <div class="task-instruction" id="taskInstruction">
+                Count the RED NUMBERS (ignore everything else!)
+            </div>
+
+            <div class="content-grid" id="contentGrid">
+                <!-- Items will be generated here -->
+            </div>
+
+            <div class="input-section">
+                <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div>
+                        <label for="visualAnswerInput" style="font-weight: bold; display: block; margin-bottom: 5px;">
+                            Visual Task Answer:
+                        </label>
+                        <input type="number" class="answer-input" id="visualAnswerInput" placeholder="?" min="-100" max="1000">
+                    </div>
+                    <div>
+                        <label for="audioAnswerInput" style="font-weight: bold; display: block; margin-bottom: 5px;">
+                            Audio Task Answer:
+                        </label>
+                        <input type="number" class="answer-input" id="audioAnswerInput" placeholder="?" min="-1000" max="5000">
+                    </div>
+                </div>
+                <button class="submit-btn" id="submitBtn" onclick="submitAnswer()">Submit Both Answers</button>
+            </div>
+
+            <div class="feedback" id="feedback" style="display: none;"></div>
+
+            <div class="stats">
+                <div class="stat">Round: <span id="roundNum">1</span></div>
+                <div class="stat">Correct: <span id="correctCount">0</span></div>
+                <div class="stat">Difficulty: <span id="difficultyLevel">Easy</span></div>
+            </div>
+
+            <button class="next-round-btn" id="nextRoundBtn" onclick="nextRound()" style="display: none;">Next Challenge</button>
+        </div>
+    </div>
+
+    <script>
+    let currentRound = 1;
+        let correctAnswers = 0;
+        let timeLeft = 30;
+        let gameActive = false;
+        let timerInterval;
+        let currentVisualTask = null;
+        let currentAudioTask = null;
+        let selectedItems = [];
+        let audioElement = null;
+        let lastRoundSuccess = false;
+
+        // Continuous difficulty scaling
+        function getDifficulty(round) {
+            const level = Math.min(Math.ceil(round / 2), 5);
+            const timeLimit = Math.max(45 - (round * 2), 25);
+            const difficultyNames = ["Beginner", "Easy", "Medium", "Challenging", "Advanced", "Expert"];
+            return {
+                name: difficultyNames[Math.min(Math.floor(round / 2), 5)],
+                level: level,
+                timeLimit: timeLimit
+            };
+        }
+
+        function startRound() {
+            gameActive = true;
+            selectedItems = [];
+            const difficulty = getDifficulty(currentRound);
+            timeLeft = difficulty.timeLimit;
+            
+            document.getElementById('difficultyLevel').textContent = difficulty.name;
+            document.getElementById('roundNum').textContent = currentRound;
+            document.getElementById('feedback').style.display = 'none';
+            document.getElementById('nextRoundBtn').style.display = 'none';
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('visualAnswerInput').value = '';
+            document.getElementById('audioAnswerInput').value = '';
+
+            // Fetch new challenge from backend
+            fetch('/api/start-challenge', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    difficulty: difficulty.level,
+                    time_limit: difficulty.timeLimit 
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                currentVisualTask = data.visual_task;
+                currentAudioTask = data.audio_task;
+                
+                // Update visual task instruction
+                document.getElementById('taskInstruction').textContent = 
+                    'VISUAL: ' + currentVisualTask.instruction;
+                
+                // Add audio task instruction
+                const audioInstruction = document.createElement('div');
+                audioInstruction.className = 'task-instruction';
+                audioInstruction.id = 'audioInstruction';
+                audioInstruction.style.background = 'rgba(33,150,243,0.2)';
+                audioInstruction.style.color = '#2196F3';
+                audioInstruction.textContent = 'AUDIO: ' + currentAudioTask.instruction;
+                document.getElementById('challengeArea').insertBefore(
+                    audioInstruction, 
+                    document.getElementById('contentGrid')
+                );
+                
+                // Generate visual content
+                generateContent(currentVisualTask);
+                
+                // Start game mechanics (no distractions, simple timer)
+                startTimer();
+                
+                // Delay audio playback by 5-8 seconds to interrupt the visual task
+                const audioDelay = 5000 + Math.random() * 3000;
+                setTimeout(() => {
+                    if (gameActive) {
+                        playAudio(currentAudioTask.audio_url);
+                    }
+                }, audioDelay);
+            });
+        }
+
+        // Called when user clicks the Start button on the start screen
+        function startGame() {
+            const overlay = document.getElementById('startOverlay');
+            if (overlay) overlay.style.display = 'none';
+            currentRound = 1;
+            correctAnswers = 0;
+            document.getElementById('correctCount').textContent = '0';
+            startRound();
+        }
+
+        function playAudio(audioUrl) {
+            if (audioElement) {
+                audioElement.pause();
+            }
+            audioElement = new Audio(audioUrl);
+            audioElement.play();
+        }
+
+        function generateContent(visualTask) {
+            const grid = document.getElementById('contentGrid');
+            grid.innerHTML = '';
+            
+            if (visualTask.display_type === 'clickable') {
+                // Image/word selection task
+                visualTask.items.forEach((item, index) => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'item clickable-item';
+                    itemDiv.dataset.item = item;
+                    itemDiv.textContent = item;
+                    itemDiv.style.background = '#' + Math.floor(Math.random()*16777215).toString(16);
+                    itemDiv.style.cursor = 'pointer';
+                    
+                    itemDiv.onclick = function() {
+                        if (!gameActive) return;
+                        
+                        if (selectedItems.includes(item)) {
+                            selectedItems = selectedItems.filter(i => i !== item);
+                            itemDiv.style.border = 'none';
+                            itemDiv.style.transform = 'scale(1)';
+                        } else {
+                            selectedItems.push(item);
+                            itemDiv.style.border = '4px solid #FFD700';
+                            itemDiv.style.transform = 'scale(1.1)';
+                        }
+                    };
+                    
+                    grid.appendChild(itemDiv);
+                });
+                
+                // For clickable tasks, hide the visual input - they just click items
+                document.getElementById('visualAnswerInput').style.display = 'none';
+                document.getElementById('visualAnswerInput').parentElement.style.display = 'none';
+            } else if (visualTask.display_type === 'count') {
+                // Number/color counting task
+                visualTask.items.forEach(item => {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'item';
+                    
+                    if (item.type === 'number') {
+                        itemDiv.textContent = item.value;
+                        itemDiv.style.background = '#' + Math.floor(Math.random()*16777215).toString(16);
+                    } else if (item.type === 'colored_box') {
+                        itemDiv.style.background = item.color;
+                        itemDiv.style.minHeight = '60px';
+                    }
+                    
+                    grid.appendChild(itemDiv);
+                });
+                
+                // Show both input fields for count tasks
+                document.getElementById('visualAnswerInput').style.display = 'inline-block';
+                document.getElementById('visualAnswerInput').parentElement.style.display = 'block';
+                document.getElementById('audioAnswerInput').style.display = 'inline-block';
+                document.getElementById('visualAnswerInput').focus();
+            }
+        }
+
+        function startTimer() {
+            const timerElement = document.getElementById('timer');
+            // Reset timer position to top-right
+            timerElement.style.left = '';
+            timerElement.style.top = '';
+            timerElement.style.animation = 'none';
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerElement.textContent = timeLeft;
+                
+                if (timeLeft <= 10) {
+                    timerElement.style.color = '#ff6600';
+                }
+                if (timeLeft <= 5) {
+                    timerElement.style.color = '#ff0000';
+                }
+                
+                if (timeLeft <= 0) {
+                    endRound({
+                        both_correct: false,
+                        visual_correct: false,
+                        audio_correct: false,
+                        visual_expected: currentVisualTask?.correct_answer,
+                        audio_expected: currentAudioTask?.correct_answer
+                    });
+                }
+            }, 1000);
+        }
+
+        function submitAnswer() {
+            if (!gameActive) return;
+            
+            // Get visual answer
+            let visualAnswer;
+            if (currentVisualTask.display_type === 'clickable') {
+                // For clickable tasks, use selected items (empty array if none selected)
+                visualAnswer = selectedItems.length > 0 ? selectedItems : [];
+            } else {
+                // For count tasks, use the visual input field
+                visualAnswer = parseInt(document.getElementById('visualAnswerInput').value) || 0;
+            }
+            
+            // Get audio answer from audio input field
+            const audioAnswer = parseInt(document.getElementById('audioAnswerInput').value) || 0;
+            
+            // Submit to backend
+            fetch('/api/submit-answer', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    visual_answer: visualAnswer,
+                    audio_answer: audioAnswer
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.both_correct) {
+                    correctAnswers++;
+                    document.getElementById('correctCount').textContent = correctAnswers;
+                }
+                endRound(data);
+            })
+            .catch(error => {
+                console.error('Error submitting answer:', error);
+                // Show error but still allow retry
+                endRound({
+                    both_correct: false,
+                    visual_correct: false,
+                    audio_correct: false,
+                    visual_expected: 'Error',
+                    audio_expected: 'Error'
+                });
+            });
+        }
+
+        function endRound(result) {
+            gameActive = false;
+            clearInterval(timerInterval);
+            
+            if (audioElement) {
+                audioElement.pause();
+            }
+            
+            // Track if this round was successful
+            lastRoundSuccess = result.both_correct;
+            
+            const feedback = document.getElementById('feedback');
+            feedback.style.display = 'block';
+            feedback.innerHTML = '';
+            
+            if (result.both_correct) {
+                feedback.className = 'feedback correct';
+                feedback.innerHTML = `🎉 Perfect! Both tasks completed correctly!<br>`;
+            } else {
+                feedback.className = 'feedback incorrect';
+                feedback.innerHTML = `<strong>Try Again - You must complete both tasks!</strong><br>`;
+                
+                if (!result.visual_correct) {
+                    feedback.innerHTML += `❌ Visual Task: Expected ${JSON.stringify(result.visual_expected)}<br>`;
+                } else {
+                    feedback.innerHTML += `✓ Visual Task: Correct!<br>`;
+                }
+                
+                if (!result.audio_correct) {
+                    feedback.innerHTML += `❌ Audio Task: Expected ${result.audio_expected}<br>`;
+                } else {
+                    feedback.innerHTML += `✓ Audio Task: Correct!<br>`;
+                }
+                
+                feedback.innerHTML += `<br><em>You will replay this round.</em>`;
+            }
+            
+            document.getElementById('submitBtn').disabled = true;
+            const nextBtn = document.getElementById('nextRoundBtn');
+            nextBtn.style.display = 'inline-block';
+            nextBtn.disabled = false;  // Ensure button is clickable
+            nextBtn.textContent = lastRoundSuccess ? 'Next Challenge' : 'Retry Challenge';
+            console.log('Round ended. Success:', lastRoundSuccess, 'Button visible:', nextBtn.style.display);
+            
+            // Remove audio instruction if present
+            const audioInstruction = document.getElementById('audioInstruction');
+            if (audioInstruction) {
+                audioInstruction.remove();
+            }
+            
+            // Reset timer color
+            const timerElement = document.getElementById('timer');
+            timerElement.style.color = '#ff4444';
+        }
+        
+        function nextRound() {
+            console.log('nextRound called. lastRoundSuccess:', lastRoundSuccess, 'currentRound:', currentRound);
+            // Only advance if last round was successful
+            if (lastRoundSuccess) {
+                currentRound++;
+            }
+            // Otherwise replay the same round
+            startRound();
+        }
+
+        // Handle Enter key for submission on both input fields
+        document.getElementById('visualAnswerInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && gameActive) {
+                submitAnswer();
+            }
+        });
+        
+        document.getElementById('audioAnswerInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && gameActive) {
+                submitAnswer();
+            }
+        });
+
+    // Don't auto-start the round; wait for user to click Start on the overlay.
+    </script>
+</body>
+</html>
