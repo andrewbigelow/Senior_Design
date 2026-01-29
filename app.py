@@ -47,6 +47,9 @@ VISUAL_TASKS = [
 
 def generate_visual_task(difficulty_level):
     """Generate a visual task based on difficulty"""
+    # Occasionally make it a voice task (10% chance at higher difficulties)
+    is_voice_task = difficulty_level >= 3 and random.random() < 0.1
+    
     task_template = random.choice(VISUAL_TASKS)
     
     # Scale items based on difficulty more gradually
@@ -55,32 +58,46 @@ def generate_visual_task(difficulty_level):
     num_items = base_items + (difficulty_level * items_per_level)
     
     if task_template['type'] == 'letter_start':
-        items = ['apple', 'banana', 'blanket', 'cow', 'cat', 'tree', 'tiger', 
-                 'dog', 'door', 'elephant', 'egg', 'flower', 'fish', 'guitar', 'goat',
-                 'house', 'hat', 'ice', 'igloo', 'jungle', 'jar', 'kite', 'key']
+        # Scan the static/images directory for available images
+        image_files = [f for f in os.listdir('static/images') if f.endswith(('.png', '.jpg', '.jpeg', '.svg'))]
         
-        # Keep trying until we get a letter with at least one matching item in our selection
+        # If no images are found, return a fallback task
+        if not image_files:
+            return {
+                'type': 'letter_start',
+                'instruction': 'No images found! Please add images to the static/images folder.',
+                'items': [],
+                'correct_answer': [],
+                'display_type': 'clickable',
+                'is_voice_task': False
+            }
+
+        items = [Path(f).stem for f in image_files] # Get the name of the item from the filename
+
         max_attempts = 10
         for attempt in range(max_attempts):
             letter = random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
             selected_items = random.sample(items, min(num_items, len(items)))
             correct_items = [item for item in selected_items if item.upper().startswith(letter)]
             
-            # If we found at least one correct item, use this selection
             if len(correct_items) > 0:
                 break
         
-        # Fallback: if still no matches, pick a letter that exists in selected items
         if len(correct_items) == 0:
             letter = selected_items[0][0].upper()
             correct_items = [item for item in selected_items if item.upper().startswith(letter)]
         
+        # Map item names back to full filenames for the frontend
+        selected_filenames = [f for f in image_files if Path(f).stem in selected_items]
+        correct_filenames = [f for f in image_files if Path(f).stem in correct_items]
+
         return {
             'type': 'letter_start',
             'instruction': f'Click on all images that start with the letter {letter}',
-            'items': selected_items,
-            'correct_answer': [item for item in selected_items if item.upper().startswith(letter)],
-            'display_type': 'clickable'
+            'items': selected_filenames,
+            'correct_answer': correct_filenames,
+            'display_type': 'clickable',
+            'is_voice_task': is_voice_task
         }
     
     elif task_template['type'] == 'color_count':
@@ -99,7 +116,8 @@ def generate_visual_task(difficulty_level):
             'instruction': f'Count all {color} colored items',
             'items': items,
             'correct_answer': correct_count,
-            'display_type': 'count'
+            'display_type': 'count',
+            'is_voice_task': is_voice_task
         }
     
     elif task_template['type'] == 'number_count':
@@ -124,7 +142,8 @@ def generate_visual_task(difficulty_level):
             'instruction': f'Count all {num_type} numbers',
             'items': items,
             'correct_answer': correct_count,
-            'display_type': 'count'
+            'display_type': 'count',
+            'is_voice_task': is_voice_task
         }
     
     return None
