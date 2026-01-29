@@ -8,7 +8,7 @@
     <style>
         body {
             margin: 0;
-            padding: 24px;
+            padding: 12px;
             font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
             background: white;
             color: #111;
@@ -16,7 +16,7 @@
         }
 
         .game-container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             position: relative;
         }
@@ -34,15 +34,20 @@
 
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 12px;
         }
 
         .header h1 {
-            font-family: 'EB Garamond', serif;
+            font-family: 'EB Garaborn', serif;
             color: #000;
-            margin: 0 0 6px 0;
-            font-size: 36px;
+            margin: 0 0 4px 0;
+            font-size: 28px;
             font-weight: 700;
+        }
+        
+        .header p {
+            margin: 0;
+            font-size: 14px;
         }
 
         .timer {
@@ -62,31 +67,51 @@
 
         /* Start screen overlay */
         #startOverlay {
-            position: absolute;
+            position: fixed;
             inset: 0;
             background: rgba(255,255,255,0.95);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 200;
+            overflow-y: auto;
+            padding: 20px 0;
         }
 
         #startCard {
-            max-width: 560px;
-            width: calc(100% - 80px);
+            max-width: 700px;
+            width: calc(100% - 40px);
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
             background: #fff;
             border-radius: 12px;
-            padding: 28px;
+            padding: 20px;
             box-shadow: 0 8px 30px rgba(0,0,0,0.12);
             text-align: center;
             border: 1px solid #e6e6e6;
+            margin: auto;
         }
 
         #startCard h2 {
             margin: 0 0 8px 0;
             font-family: 'EB Garamond', serif;
             color: #000;
-            font-size: 28px;
+            font-size: 24px;
+        }
+        
+        #startCard p {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        #startCard ul {
+            text-align: left;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        #startCard h3 {
+            font-size: 16px;
         }
 
         #startCard p { color: #333; margin: 8px 0 12px 0; }
@@ -117,43 +142,65 @@
 
         .challenge-area {
             background: rgba(255,255,255,0.1);
-            border-radius: 15px;
-            padding: 40px;
-            margin: 20px 0;
-            min-height: 400px;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 12px 0;
+            min-height: 300px;
             position: relative;
             border: 2px solid rgba(255,255,255,0.2);
         }
 
         .task-instruction {
-            font-size: 18px;
+            font-size: 15px;
             font-weight: bold;
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 12px;
             color: #4CAF50;
             background: rgba(76,175,80,0.2);
-            padding: 15px;
-            border-radius: 10px;
+            padding: 10px;
+            border-radius: 8px;
         }
 
         .content-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
+            grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+            max-width: 100%;
         }
 
         .item {
-            padding: 15px;
+            padding: 6px;
             text-align: center;
-            border-radius: 10px;
-            font-size: 18px;
+            border-radius: 8px;
+            font-size: 16px;
             font-weight: bold;
-            transition: transform 0.2s;
+            transition: all 0.2s;
             cursor: pointer;
+            background: white;
+            border: 3px solid transparent;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 75px;
+            position: relative;
+        }
+        
+        .item img {
+            max-width: 100%;
+            max-height: 70px;
+            object-fit: contain;
         }
 
         .item:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .item.selected {
+            border: 4px solid #FFD700;
+            background: #fffef0;
             transform: scale(1.05);
         }
 
@@ -174,12 +221,12 @@
 
         .input-section {
             text-align: center;
-            margin: 30px 0;
+            margin: 15px 0;
         }
 
         .answer-input {
-            font-size: 20px;
-            padding: 15px;
+            font-size: 18px;
+            padding: 12px;
             border: 3px solid #4CAF50;
             border-radius: 10px;
             background: rgba(255,255,255,0.9);
@@ -218,11 +265,11 @@
 
         .feedback {
             text-align: center;
-            font-size: 20px;
+            font-size: 16px;
             font-weight: bold;
-            margin: 20px 0;
-            padding: 15px;
-            border-radius: 10px;
+            margin: 12px 0;
+            padding: 12px;
+            border-radius: 8px;
         }
 
         .feedback.correct {
@@ -273,9 +320,9 @@
     <img id="ucsdLogo" src="./bioengineering logo.jpg" alt="UCSD Bioengineering Logo" onerror="this.style.display='none'">
 
         <!-- Team Setup Screen -->
-        <div id="teamSetupOverlay" style="position: absolute; inset: 0; background: rgba(255,255,255,0.98); display: flex; align-items: center; justify-content: center; z-index: 300;">
-            <div id="teamSetupCard" style="max-width: 700px; width: calc(100% - 80px); background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); border: 1px solid #e6e6e6;">
-                <h2 style="margin: 0 0 10px 0; font-family: 'EB Garamond', serif; color: #000; font-size: 28px; text-align: center;">Team Setup</h2>
+        <div id="teamSetupOverlay" style="position: fixed; inset: 0; background: rgba(255,255,255,0.98); display: flex; align-items: center; justify-content: center; z-index: 300; overflow-y: auto; padding: 20px 0;">
+            <div id="teamSetupCard" style="max-width: 700px; width: calc(100% - 40px); max-height: calc(100vh - 40px); overflow-y: auto; background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); border: 1px solid #e6e6e6; margin: auto;">
+                <h2 style="margin: 0 0 10px 0; font-family: 'EB Garamond', serif; color: #000; font-size: 24px; text-align: center;">Team Setup</h2>
                 <p style="text-align: center; color: #555; margin-bottom: 20px;">Enter your team members' information. You'll use their names to request help during challenges!</p>
                 
                 <div id="playerInputs" style="margin-bottom: 20px;">
@@ -303,9 +350,42 @@
 
         <!-- Start screen: blocks play until user clicks Start -->
         <div id="startOverlay" style="display: none;">
-            <div id="startCard">
+            <div id="startCard" style="max-width: 700px;">
                     <h2>Cognitive Overload Training</h2>
-                    <p>Handle both visual and audio tasks simultaneously. Difficulty increases gradually with each round.</p>
+                    <p style="margin: 12px 0;">Welcome! This game challenges your ability to multitask under pressure.</p>
+                    
+                    <div style="text-align: left; margin: 20px 0; padding: 18px; background: #f8f9fa; border-radius: 8px; border: 2px solid #e0e0e0;">
+                        <h3 style="margin: 0 0 12px 0; color: #00457c; font-size: 18px;">📋 How It Works:</h3>
+                        <ul style="margin: 8px 0; padding-left: 24px; line-height: 1.8;">
+                            <li><strong>Levels 1-3:</strong> Complete visual tasks only (click images matching the letter)</li>
+                            <li><strong>Level 4+:</strong> Audio tasks are added - you must complete BOTH tasks simultaneously!</li>
+                            <li><strong>Difficulty increases:</strong> More images, less time, faster pace</li>
+                            <li><strong>Team communication:</strong> Say a teammate's name to request help</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="text-align: left; margin: 20px 0; padding: 18px; background: #fff4e6; border-radius: 8px; border: 2px solid #ffb74d;">
+                        <h3 style="margin: 0 0 12px 0; color: #f57c00; font-size: 18px;">🎮 Visual Task Example:</h3>
+                        <p style="margin: 8px 0; font-size: 14px;"><strong>Task:</strong> "Click on all images that start with the letter B"</p>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0;">
+                            <div style="padding: 8px; text-align: center; background: #4CAF50; color: white; border-radius: 6px; font-size: 12px; border: 3px solid #FFD700;">🍌 Banana ✓</div>
+                            <div style="padding: 8px; text-align: center; background: #2196F3; color: white; border-radius: 6px; font-size: 12px;">🚗 Car</div>
+                            <div style="padding: 8px; text-align: center; background: #9C27B0; color: white; border-radius: 6px; font-size: 12px; border: 3px solid #FFD700;">🐝 Bee ✓</div>
+                            <div style="padding: 8px; text-align: center; background: #FF5722; color: white; border-radius: 6px; font-size: 12px;">🌸 Flower</div>
+                        </div>
+                        <p style="margin: 8px 0; font-size: 13px; color: #666;"><em>Click items with gold borders (Banana, Bee)</em></p>
+                    </div>
+                    
+                    <div style="text-align: left; margin: 20px 0; padding: 18px; background: #e8f5e9; border-radius: 8px; border: 2px solid #66bb6a;">
+                        <h3 style="margin: 0 0 12px 0; color: #2e7d32; font-size: 18px;">💡 Important Notes:</h3>
+                        <ul style="margin: 8px 0; padding-left: 24px; line-height: 1.8; font-size: 14px;">
+                            <li>Some images can be interpreted differently (e.g., "peanuts" or "nut" - both count!)</li>
+                            <li>Timer decreases as you progress - work quickly!</li>
+                            <li>You must get BOTH tasks correct to advance</li>
+                            <li>Failed rounds will be repeated</li>
+                        </ul>
+                    </div>
+                    
                     <div id="teamInfoDisplay" style="margin: 15px 0; padding: 12px; background: #f0f7ff; border-radius: 8px; text-align: left;">
                         <strong>Team Members:</strong>
                         <div id="teamList" style="margin-top: 8px; font-size: 14px;"></div>
@@ -679,54 +759,60 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ 
                     difficulty: difficulty.level,
-                    time_limit: difficulty.timeLimit 
+                    time_limit: difficulty.timeLimit,
+                    round: currentRound
                 })
             })
             .then(res => res.json())
             .then(data => {
                 currentVisualTask = data.visual_task;
                 currentAudioTask = data.audio_task;
-                
-                // Check if this is a voice task
-                if (currentVisualTask.is_voice_task) {
-                    document.getElementById('voiceAnswerSection').style.display = 'block';
-                    document.getElementById('visualAnswerInput').parentElement.style.display = 'none';
-                } else {
-                    document.getElementById('voiceAnswerSection').style.display = 'none';
-                }
+                const hasAudio = data.has_audio;
                 
                 // Update visual task instruction
                 let visualInstruction = 'VISUAL: ' + currentVisualTask.instruction;
-                if (currentVisualTask.is_voice_task) {
-                    visualInstruction += ' (SPEAK YOUR ANSWER!)';
-                }
                 document.getElementById('taskInstruction').textContent = visualInstruction;
                 
-                // Add audio task instruction
-                const audioInstruction = document.createElement('div');
-                audioInstruction.className = 'task-instruction';
-                audioInstruction.id = 'audioInstruction';
-                audioInstruction.style.background = 'rgba(33,150,243,0.2)';
-                audioInstruction.style.color = '#2196F3';
-                audioInstruction.textContent = 'AUDIO: ' + currentAudioTask.instruction;
-                document.getElementById('challengeArea').insertBefore(
-                    audioInstruction, 
-                    document.getElementById('contentGrid')
-                );
+                // Add or hide audio task instruction based on level
+                const existingAudioInstruction = document.getElementById('audioInstruction');
+                if (existingAudioInstruction) {
+                    existingAudioInstruction.remove();
+                }
+                
+                if (hasAudio && currentAudioTask) {
+                    const audioInstruction = document.createElement('div');
+                    audioInstruction.className = 'task-instruction';
+                    audioInstruction.id = 'audioInstruction';
+                    audioInstruction.style.background = 'rgba(33,150,243,0.2)';
+                    audioInstruction.style.color = '#2196F3';
+                    audioInstruction.textContent = 'AUDIO: ' + currentAudioTask.instruction;
+                    document.getElementById('challengeArea').insertBefore(
+                        audioInstruction, 
+                        document.getElementById('contentGrid')
+                    );
+                    
+                    // Show audio input
+                    document.getElementById('audioAnswerInput').parentElement.style.display = 'block';
+                } else {
+                    // Hide audio input for levels 1-3
+                    document.getElementById('audioAnswerInput').parentElement.style.display = 'none';
+                }
                 
                 // Generate visual content
                 generateContent(currentVisualTask);
                 
-                // Start game mechanics (no distractions, simple timer)
+                // Start game mechanics
                 startTimer();
                 
-                // Delay audio playback by 5-8 seconds to interrupt the visual task
-                const audioDelay = 5000 + Math.random() * 3000;
-                setTimeout(() => {
-                    if (gameActive) {
-                        playAudio(currentAudioTask.audio_url);
-                    }
-                }, audioDelay);
+                // Play audio after delay (only if audio task exists)
+                if (hasAudio && currentAudioTask) {
+                    const audioDelay = 5000 + Math.random() * 3000;
+                    setTimeout(() => {
+                        if (gameActive) {
+                            playAudio(currentAudioTask.audio_url);
+                        }
+                    }, audioDelay);
+                }
             });
         }
 
@@ -757,33 +843,44 @@
             grid.innerHTML = '';
             
             if (visualTask.display_type === 'clickable') {
-                // Image/word selection task
-                visualTask.items.forEach((item, index) => {
+                // Image selection task - display actual images
+                visualTask.items.forEach((filename, index) => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'item clickable-item';
-                    itemDiv.dataset.item = item;
-                    itemDiv.textContent = item;
-                    itemDiv.style.background = '#' + Math.floor(Math.random()*16777215).toString(16);
+                    itemDiv.dataset.item = filename;
                     itemDiv.style.cursor = 'pointer';
+                    
+                    // Create image element
+                    const img = document.createElement('img');
+                    img.src = '/static/images/' + filename;
+                    img.alt = filename;
+                    img.onerror = function() {
+                        // Fallback if image fails to load
+                        img.style.display = 'none';
+                        const fallbackText = document.createElement('div');
+                        fallbackText.textContent = '?';
+                        fallbackText.style.fontSize = '24px';
+                        itemDiv.appendChild(fallbackText);
+                    };
+                    
+                    itemDiv.appendChild(img);
                     
                     itemDiv.onclick = function() {
                         if (!gameActive) return;
                         
-                        if (selectedItems.includes(item)) {
-                            selectedItems = selectedItems.filter(i => i !== item);
-                            itemDiv.style.border = 'none';
-                            itemDiv.style.transform = 'scale(1)';
+                        if (selectedItems.includes(filename)) {
+                            selectedItems = selectedItems.filter(i => i !== filename);
+                            itemDiv.classList.remove('selected');
                         } else {
-                            selectedItems.push(item);
-                            itemDiv.style.border = '4px solid #FFD700';
-                            itemDiv.style.transform = 'scale(1.1)';
+                            selectedItems.push(filename);
+                            itemDiv.classList.add('selected');
                         }
                     };
                     
                     grid.appendChild(itemDiv);
                 });
                 
-                // For clickable tasks, hide the visual input - they just click items
+                // Hide visual input for clickable tasks
                 document.getElementById('visualAnswerInput').style.display = 'none';
                 document.getElementById('visualAnswerInput').parentElement.style.display = 'none';
             } else if (visualTask.display_type === 'count') {
@@ -791,22 +888,25 @@
                 visualTask.items.forEach(item => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'item';
+                    itemDiv.style.cursor = 'default';
                     
                     if (item.type === 'number') {
                         itemDiv.textContent = item.value;
-                        itemDiv.style.background = '#' + Math.floor(Math.random()*16777215).toString(16);
+                        // Random colors for numbers
+                        const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#fd79a8', '#00b894'];
+                        itemDiv.style.background = colors[Math.floor(Math.random() * colors.length)];
+                        itemDiv.style.color = 'white';
                     } else if (item.type === 'colored_box') {
                         itemDiv.style.background = item.color;
-                        itemDiv.style.minHeight = '60px';
+                        itemDiv.style.minHeight = '80px';
                     }
                     
                     grid.appendChild(itemDiv);
                 });
                 
-                // Show both input fields for count tasks
+                // Show visual input for count tasks
                 document.getElementById('visualAnswerInput').style.display = 'inline-block';
                 document.getElementById('visualAnswerInput').parentElement.style.display = 'block';
-                document.getElementById('audioAnswerInput').style.display = 'inline-block';
                 document.getElementById('visualAnswerInput').focus();
             }
         }
@@ -844,27 +944,17 @@
         function submitAnswer() {
             if (!gameActive) return;
             
-            // Get visual answer
+            // Get visual answer (always required)
             let visualAnswer;
-            if (currentVisualTask.is_voice_task) {
-                // For voice tasks, use voice answer text
-                if (!voiceAnswerText) {
-                    alert('Please speak your answer first!');
-                    return;
-                }
-                // Try to extract number from voice text
-                const numberMatch = voiceAnswerText.match(/\d+/);
-                visualAnswer = numberMatch ? parseInt(numberMatch[0]) : voiceAnswerText.toLowerCase();
-            } else if (currentVisualTask.display_type === 'clickable') {
-                // For clickable tasks, use selected items (empty array if none selected)
+            if (currentVisualTask.display_type === 'clickable') {
                 visualAnswer = selectedItems.length > 0 ? selectedItems : [];
             } else {
-                // For count tasks, use the visual input field
                 visualAnswer = parseInt(document.getElementById('visualAnswerInput').value) || 0;
             }
             
-            // Get audio answer from audio input field
-            const audioAnswer = parseInt(document.getElementById('audioAnswerInput').value) || 0;
+            // Get audio answer (only if audio task exists)
+            const audioAnswer = currentAudioTask ? 
+                (parseInt(document.getElementById('audioAnswerInput').value) || 0) : null;
             
             // Submit to backend
             fetch('/api/submit-answer', {
@@ -885,7 +975,6 @@
             })
             .catch(error => {
                 console.error('Error submitting answer:', error);
-                // Show error but still allow retry
                 endRound({
                     both_correct: false,
                     visual_correct: false,
@@ -916,10 +1005,18 @@
             
             if (result.both_correct) {
                 feedback.className = 'feedback correct';
-                feedback.innerHTML = `🎉 Perfect! Both tasks completed correctly!<br>`;
+                if (currentRound <= 3) {
+                    feedback.innerHTML = `🎉 Perfect! Visual task completed correctly!<br>`;
+                } else {
+                    feedback.innerHTML = `🎉 Perfect! Both tasks completed correctly!<br>`;
+                }
             } else {
                 feedback.className = 'feedback incorrect';
-                feedback.innerHTML = `<strong>Try Again - You must complete both tasks!</strong><br>`;
+                if (currentRound <= 3) {
+                    feedback.innerHTML = `<strong>Try Again!</strong><br>`;
+                } else {
+                    feedback.innerHTML = `<strong>Try Again - You must complete both tasks!</strong><br>`;
+                }
                 
                 if (!result.visual_correct) {
                     feedback.innerHTML += `❌ Visual Task: Expected ${JSON.stringify(result.visual_expected)}<br>`;
@@ -927,9 +1024,9 @@
                     feedback.innerHTML += `✓ Visual Task: Correct!<br>`;
                 }
                 
-                if (!result.audio_correct) {
+                if (currentAudioTask && !result.audio_correct) {
                     feedback.innerHTML += `❌ Audio Task: Expected ${result.audio_expected}<br>`;
-                } else {
+                } else if (currentAudioTask) {
                     feedback.innerHTML += `✓ Audio Task: Correct!<br>`;
                 }
                 
@@ -939,9 +1036,8 @@
             document.getElementById('submitBtn').disabled = true;
             const nextBtn = document.getElementById('nextRoundBtn');
             nextBtn.style.display = 'inline-block';
-            nextBtn.disabled = false;  // Ensure button is clickable
+            nextBtn.disabled = false;
             nextBtn.textContent = lastRoundSuccess ? 'Next Challenge' : 'Retry Challenge';
-            console.log('Round ended. Success:', lastRoundSuccess, 'Button visible:', nextBtn.style.display);
             
             // Remove audio instruction if present
             const audioInstruction = document.getElementById('audioInstruction');

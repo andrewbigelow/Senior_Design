@@ -21,120 +21,154 @@ game_state = {
     'correct_answer': None
 }
 
-# Visual task templates with image categories
-VISUAL_TASKS = [
-    {
-        'type': 'letter_start',
-        'instruction': 'Click on all images that start with the letter {letter}',
-        'categories': ['apple', 'banana', 'cow', 'dog', 'elephant', 'flower', 'guitar', 'hat', 'ice', 'jungle']
-    },
-    {
-        'type': 'color_count',
-        'instruction': 'Count all {color} colored items',
-        'colors': ['red', 'blue', 'green', 'yellow', 'purple']
-    },
-    {
-        'type': 'number_count',
-        'instruction': 'Count all {type} numbers',
-        'types': ['odd', 'even', 'prime']
-    },
-    {
-        'type': 'shape_select',
-        'instruction': 'Click on all {shape} shapes',
-        'shapes': ['circle', 'square', 'triangle', 'star']
+# Image aliases for ambiguous interpretations
+# Maps image filename (without extension) to list of accepted starting letters
+IMAGE_ALIASES = {
+    'peanuts': ['p', 'n'],  # Can be "peanuts" or "nut"
+    'telescope': ['t', 's'],  # Can be "telescope" or "scope"
+    'squirrel': ['s', 'c'],  # Can be "squirrel" or "chipmunk"
+}
+
+# Visual task templates - weighted to favor clipart images (2.5:1:1:1 ratio)
+# More clipart entries = higher probability of image tasks
+VISUAL_TASK_TYPES = ['clipart_images', 'clipart_images', 'clipart_images', 'clipart_images', 'clipart_images', 
+                     'color_count', 'color_count', 'number_count', 'number_count', 'number_sum', 'number_sum']
+
+def generate_clipart_task(difficulty_level, num_items):
+    """Generate a clipart-based image selection task"""
+    # Scan the static/images directory for available images
+    image_files = [f for f in os.listdir('static/images') if f.endswith(('.png', '.jpg', '.jpeg', '.svg'))]
+    
+    # If no images are found, return None
+    if not image_files:
+        return None
+
+    # Get item names from filenames
+    items = [Path(f).stem for f in image_files]
+    
+    # Try to find a letter that has at least one matching image
+    max_attempts = 20
+    letter = None
+    selected_items = []
+    correct_items = []
+    ambiguous_items = []  # Items that can be clicked or not without penalty
+    
+    for attempt in range(max_attempts):
+        test_letter = random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+        test_selected = random.sample(items, min(num_items, len(items)))
+        
+        # Check which items match this letter
+        test_correct = []
+        test_ambiguous = []
+        for item in test_selected:
+            item_lower = item.lower()
+            # Check if item starts with the letter (primary match)
+            if item_lower.startswith(test_letter.lower()):
+                test_correct.append(item)
+            # Check aliases - these are ambiguous/optional
+            elif item_lower in IMAGE_ALIASES:
+                if test_letter.lower() in [alias.lower() for alias in IMAGE_ALIASES[item_lower]]:
+                    test_ambiguous.append(item)
+        
+        # Accept if we have at least one correct item and not too many
+        if 1 <= len(test_correct) <= len(test_selected) - 1:
+            letter = test_letter
+            selected_items = test_selected
+            correct_items = test_correct
+            ambiguous_items = test_ambiguous
+            break
+    
+    # Fallback: if no good letter found, just pick the first letter of a random item
+    if letter is None:
+        selected_items = random.sample(items, min(num_items, len(items)))
+        letter = selected_items[0][0].upper()
+        correct_items = [item for item in selected_items if item.upper().startswith(letter)]
+        ambiguous_items = []
+    
+    # Map item names back to full filenames for the frontend
+    selected_filenames = [f for f in image_files if Path(f).stem in selected_items]
+    correct_filenames = [f for f in image_files if Path(f).stem in correct_items]
+    ambiguous_filenames = [f for f in image_files if Path(f).stem in ambiguous_items]
+
+    return {
+        'type': 'clipart_images',
+        'instruction': f'Click on all images that start with the letter {letter}',
+        'items': selected_filenames,
+        'correct_answer': correct_filenames,
+        'ambiguous_answer': ambiguous_filenames,
+        'display_type': 'clickable',
+        'letter': letter
     }
-]
 
 def generate_visual_task(difficulty_level):
-    """Generate a visual task based on difficulty"""
-    # Occasionally make it a voice task (10% chance at higher difficulties)
-    is_voice_task = difficulty_level >= 3 and random.random() < 0.1
-    
-    task_template = random.choice(VISUAL_TASKS)
-    
-    # Scale items based on difficulty more gradually
-    base_items = 8
-    items_per_level = 4
+    """Generate a visual task - randomly choose between different task types"""
+    # Scale items based on difficulty
+    base_items = 6
+    items_per_level = 2
     num_items = base_items + (difficulty_level * items_per_level)
     
-    if task_template['type'] == 'letter_start':
-        # Scan the static/images directory for available images
-        image_files = [f for f in os.listdir('static/images') if f.endswith(('.png', '.jpg', '.jpeg', '.svg'))]
-        
-        # If no images are found, return a fallback task
-        if not image_files:
-            return {
-                'type': 'letter_start',
-                'instruction': 'No images found! Please add images to the static/images folder.',
-                'items': [],
-                'correct_answer': [],
-                'display_type': 'clickable',
-                'is_voice_task': False
-            }
-
-        items = [Path(f).stem for f in image_files] # Get the name of the item from the filename
-
-        max_attempts = 10
-        for attempt in range(max_attempts):
-            letter = random.choice('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
-            selected_items = random.sample(items, min(num_items, len(items)))
-            correct_items = [item for item in selected_items if item.upper().startswith(letter)]
-            
-            if len(correct_items) > 0:
-                break
-        
-        if len(correct_items) == 0:
-            letter = selected_items[0][0].upper()
-            correct_items = [item for item in selected_items if item.upper().startswith(letter)]
-        
-        # Map item names back to full filenames for the frontend
-        selected_filenames = [f for f in image_files if Path(f).stem in selected_items]
-        correct_filenames = [f for f in image_files if Path(f).stem in correct_items]
-
-        return {
-            'type': 'letter_start',
-            'instruction': f'Click on all images that start with the letter {letter}',
-            'items': selected_filenames,
-            'correct_answer': correct_filenames,
-            'display_type': 'clickable',
-            'is_voice_task': is_voice_task
-        }
+    # Choose a random task type
+    task_type = random.choice(VISUAL_TASK_TYPES)
     
-    elif task_template['type'] == 'color_count':
-        color = random.choice(task_template['colors'])
+    if task_type == 'clipart_images':
+        task = generate_clipart_task(difficulty_level, num_items)
+        if task:
+            return task
+        # Fallback to another type if clipart fails
+        task_type = 'number_count'
+    
+    if task_type == 'color_count':
+        colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink']
+        color = random.choice(colors)
         
         items = []
-        correct_count = 0
-        for i in range(num_items):
-            item_color = random.choice(task_template['colors'])
+        # Ensure at least 1 correct answer by placing the target color first
+        items.append({'id': 0, 'color': color, 'type': 'colored_box'})
+        correct_count = 1
+        
+        for i in range(1, num_items):
+            item_color = random.choice(colors)
             items.append({'id': i, 'color': item_color, 'type': 'colored_box'})
             if item_color == color:
                 correct_count += 1
+        
+        # Shuffle to randomize position
+        random.shuffle(items)
+        # Re-assign IDs after shuffle
+        for i, item in enumerate(items):
+            item['id'] = i
         
         return {
             'type': 'color_count',
             'instruction': f'Count all {color} colored items',
             'items': items,
             'correct_answer': correct_count,
-            'display_type': 'count',
-            'is_voice_task': is_voice_task
+            'display_type': 'count'
         }
     
-    elif task_template['type'] == 'number_count':
-        num_type = random.choice(task_template['types'])
+    elif task_type == 'number_count':
+        num_type = random.choice(['odd', 'even'])
         
-        numbers = random.sample(range(1, 100), num_items)
+        # Ensure at least 1 correct answer
+        if num_type == 'odd':
+            numbers = [random.choice([1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29])]  # Start with an odd
+        else:
+            numbers = [random.choice([2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30])]  # Start with an even
+        
+        # Add remaining random numbers
+        remaining = random.sample(range(1, 50), min(num_items - 1, 48))
+        numbers.extend(remaining)
+        
+        # Count correct answers
         correct_count = 0
-        
         for num in numbers:
             if num_type == 'odd' and num % 2 == 1:
                 correct_count += 1
             elif num_type == 'even' and num % 2 == 0:
                 correct_count += 1
-            elif num_type == 'prime':
-                if num > 1 and all(num % i != 0 for i in range(2, int(num**0.5) + 1)):
-                    correct_count += 1
         
+        # Shuffle to randomize position
+        random.shuffle(numbers)
         items = [{'id': i, 'value': num, 'type': 'number'} for i, num in enumerate(numbers)]
         
         return {
@@ -142,11 +176,35 @@ def generate_visual_task(difficulty_level):
             'instruction': f'Count all {num_type} numbers',
             'items': items,
             'correct_answer': correct_count,
-            'display_type': 'count',
-            'is_voice_task': is_voice_task
+            'display_type': 'count'
         }
     
-    return None
+    elif task_type == 'number_sum':
+        operation = random.choice(['add_even', 'add_odd', 'add_all'])
+        numbers = random.sample(range(1, 30), min(num_items, 29))
+        
+        if operation == 'add_even':
+            correct_answer = sum(n for n in numbers if n % 2 == 0)
+            instruction = 'Add all EVEN numbers'
+        elif operation == 'add_odd':
+            correct_answer = sum(n for n in numbers if n % 2 == 1)
+            instruction = 'Add all ODD numbers'
+        else:
+            correct_answer = sum(numbers)
+            instruction = 'Add ALL numbers'
+        
+        items = [{'id': i, 'value': num, 'type': 'number'} for i, num in enumerate(numbers)]
+        
+        return {
+            'type': 'number_sum',
+            'instruction': instruction,
+            'items': items,
+            'correct_answer': correct_answer,
+            'display_type': 'count'
+        }
+    
+    # Fallback
+    return generate_clipart_task(difficulty_level, num_items)
 
 def generate_audio_task(difficulty_level, time_limit=45):
     """Generate an audio task using the difficulty module"""
@@ -217,24 +275,39 @@ def start_challenge():
     """Start a new challenge round"""
     data = request.json
     difficulty_level = data.get('difficulty', 1)
+    current_round = data.get('round', 1)
     time_limit = data.get('time_limit', 45)  # Get time limit from request
     
-    # Generate both visual and audio tasks
+    # Generate visual task (always clipart-based)
     visual_task = generate_visual_task(difficulty_level)
-    audio_task = generate_audio_task(difficulty_level, time_limit)
-    
     game_state['visual_task'] = visual_task
-    game_state['audio_task'] = audio_task
-    game_state['audio_file'] = audio_task['audio_file']
     
-    return jsonify({
-        'visual_task': visual_task,
-        'audio_task': {
-            'instruction': audio_task['instruction'],
-            'audio_url': f'/api/audio/{audio_task["audio_file"]}'
-        },
-        'difficulty': difficulty_level
-    })
+    # Only include audio task after level 3
+    if current_round > 3:
+        audio_task = generate_audio_task(difficulty_level, time_limit)
+        game_state['audio_task'] = audio_task
+        game_state['audio_file'] = audio_task['audio_file']
+        
+        return jsonify({
+            'visual_task': visual_task,
+            'audio_task': {
+                'instruction': audio_task['instruction'],
+                'audio_url': f'/api/audio/{audio_task["audio_file"]}'
+            },
+            'difficulty': difficulty_level,
+            'has_audio': True
+        })
+    else:
+        # Levels 1-3: No audio task
+        game_state['audio_task'] = None
+        game_state['audio_file'] = None
+        
+        return jsonify({
+            'visual_task': visual_task,
+            'audio_task': None,
+            'difficulty': difficulty_level,
+            'has_audio': False
+        })
 
 @app.route('/api/audio/<filename>')
 def serve_audio(filename):
@@ -258,14 +331,25 @@ def submit_answer():
     if game_state['visual_task']:
         if game_state['visual_task']['display_type'] == 'clickable':
             correct_set = set(game_state['visual_task']['correct_answer']) if game_state['visual_task']['correct_answer'] else set()
+            ambiguous_set = set(game_state['visual_task'].get('ambiguous_answer', []))
             user_set = set(visual_answer) if visual_answer else set()
-            visual_correct = correct_set == user_set
+            
+            # Remove ambiguous items from comparison - they're optional
+            user_set_filtered = user_set - ambiguous_set
+            
+            # Check if user selected all required items and no incorrect items
+            visual_correct = correct_set == user_set_filtered
         else:
             visual_correct = visual_answer == game_state['visual_task']['correct_answer']
     
-    # Check audio answer
+    # Check audio answer (only if audio task exists)
     if game_state['audio_task']:
         audio_correct = audio_answer == game_state['audio_task']['correct_answer']
+        audio_expected = game_state['audio_task']['correct_answer']
+    else:
+        # No audio task = automatically correct
+        audio_correct = True
+        audio_expected = 'N/A'  # Not applicable for levels 1-3
     
     both_correct = visual_correct and audio_correct
     
@@ -277,7 +361,7 @@ def submit_answer():
         'audio_correct': audio_correct,
         'both_correct': both_correct,
         'visual_expected': game_state['visual_task']['correct_answer'] if game_state['visual_task'] else None,
-        'audio_expected': game_state['audio_task']['correct_answer'] if game_state['audio_task'] else None,
+        'audio_expected': audio_expected,
         'total_correct': game_state['correct_answers']
     })
 
