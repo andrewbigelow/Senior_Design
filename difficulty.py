@@ -35,10 +35,8 @@ def speech_rate_by_difficulty(difficulty: int) -> bool:
     difficulty (int): The difficulty level (1-5).
     Returns: bool: True if speech should be slow, False otherwise.
     '''
-    if difficulty == 1:
-        return True
-    else:
-        return False
+    # Always use slow speech for better comprehension
+    return True
     
 def use_accents_by_difficulty(difficulty: int) -> bool:
     '''
@@ -53,7 +51,7 @@ def use_accents_by_difficulty(difficulty: int) -> bool:
 
 # Currently, number of words = difficulty * 20
 # Number of spaces between words = number of words - (difficulty * 5)
-def audio_output_by_difficulty(difficulty: int) -> list[str]:
+def audio_output_by_difficulty(difficulty: int, time_limit: int = 45) -> list[str]:
     '''
     Determines the audio output file name based on difficulty level.
     difficulty (int): The difficulty level (1-5).
@@ -73,49 +71,40 @@ def audio_output_by_difficulty(difficulty: int) -> list[str]:
     
     output_audio = []
 
-    if difficulty <=2:
-        words = word_generator.load_words('easy')
-    elif difficulty ==3:
-        words = word_generator.load_words('medium')
-    else: 
-        hard_words = word_generator.load_words('hard')
-        emergency_words = word_generator.load_words('emergency')
-        words = hard_words + emergency_words
-        
-    selected_words = random.sample(words, difficulty * 20)
-    output_audio.extend(selected_words)
-
-    num_words = len(output_audio)
-    extra_spaces = max(0, num_words - (difficulty * 5))
-
-    # insert spaces at random positions between items
-    positions = random.sample(range(num_words + 1), extra_spaces)
-    for pos in sorted(positions, reverse=True):
-        output_audio.insert(pos, ' ')
-
-    interspersed = []
-    for i, item in enumerate(output_audio):
-        interspersed.append(item)
-        if i < len(output_audio) - 1:
-            interspersed.append(' ')
-    output_audio = interspersed
-
+    # Calculate max items based on time limit
+    # Assume slow speech: ~2 seconds per word/number, plus task instruction (~3 seconds)
+    # Add 5 second safety margin for audio delay
+    max_audio_time = time_limit - 5
+    max_items = max(3, int((max_audio_time - 3) / 2))  # Minimum 3 items
+    
+    # Reduce word count significantly - just 2-4 words per difficulty level
+    # But never exceed what time allows
+    words = word_generator.load_words('easy' if difficulty <= 2 else 'medium' if difficulty == 3 else 'hard')
+    num_words = min(2 + difficulty, 6, max_items // 2)  # Half of max items for words
+    selected_words = random.sample(words, num_words)
+    
+    # Reduce number count - just 3-5 numbers per difficulty level
+    # But never exceed what time allows
+    num_numbers = min(3 + difficulty, 7, max_items - num_words)  # Rest for numbers
+    num_numbers = max(1, num_numbers)  # At least 1 number
+    
     if "even" in task or "odd" in task:
-        numbers = [str(num) for num in range(1, 101)]
+        numbers = [str(num) for num in range(1, 31)]  # Smaller range 1-30
     else:
-        filler_numbers = [random.randint(1, 100) for _ in range(difficulty * 10)]
-        numbers = [str(num) for num in realistic_prime_numbers + filler_numbers]
-        numbers = list(set(numbers))  # Remove duplicates
-    selected_numbers = random.sample(numbers, difficulty * 5)
+        numbers = [str(num) for num in realistic_prime_numbers[:10]]  # Just first 10 primes
+    selected_numbers = random.sample(numbers, min(num_numbers, len(numbers)))
     
-    # Insert numbers at random even indices (to avoid replacing spaces)
-    for number in selected_numbers:
-        insert_index = 1
-        while insert_index % 2 != 0:
-            insert_index = random.randint(0, len(output_audio))
-        output_audio[insert_index] = number
+    # Build simple audio output: task, then alternating words and numbers with pauses
+    output_audio = [task + '. ']
     
-    output_audio.insert(0, task + '. ')
+    # Add pauses between items for clarity
+    all_items = selected_words + selected_numbers
+    random.shuffle(all_items)
+    
+    for item in all_items:
+        output_audio.append(item)
+        output_audio.append(', ')  # Pause between items
+    
     return output_audio
 
 

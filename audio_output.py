@@ -1,5 +1,6 @@
 from gtts import gTTS
 import random
+import time
 
 '''
 Credit to https://pypi.org/project/gTTS/
@@ -26,7 +27,9 @@ def create_number_audio(text: list[str], slow: bool, accents: bool) -> str:
     text (list[str]): The text to be converted to speech. Should contain both numbers and words.
     Returns: str: The name of the output audio file.
     '''
-    output_filename = "number_audio.mp3"
+    # Use timestamp to prevent caching issues
+    timestamp = int(time.time() * 1000)
+    output_filename = f"number_audio_{timestamp}.mp3"
     speech_output = ' '.join(text)
     possible_accents = ['com', 'co.uk', 'ca', 'com.au', 'ie', 'co.in', 'co.za', 'com.ng']
     if accents:
