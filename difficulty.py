@@ -83,15 +83,34 @@ def audio_output_by_difficulty(difficulty: int, time_limit: int = 45) -> list[st
     num_words = min(2 + difficulty, 6, max_items // 2)  # Half of max items for words
     selected_words = random.sample(words, num_words)
     
-    # Reduce number count - just 3-5 numbers per difficulty level
-    # But never exceed what time allows
-    num_numbers = min(3 + difficulty, 7, max_items - num_words)  # Rest for numbers
-    num_numbers = max(1, num_numbers)  # At least 1 number
-    
-    if "even" in task or "odd" in task:
-        numbers = [str(num) for num in range(1, 31)]  # Smaller range 1-30
+    # Significantly reduce number count and use smaller ranges for early levels
+    # Level 1-2: 3-4 numbers from 1-10
+    # Level 3: 4-5 numbers from 1-20  
+    # Level 4+: 5-6 numbers from 1-30
+    if difficulty <= 2:
+        num_numbers = min(3, max_items - num_words)  # Just 3 numbers for levels 1-2
+        if "even" in task or "odd" in task:
+            numbers = [str(num) for num in range(1, 11)]  # Small range 1-10
+        else:
+            numbers = [str(num) for num in realistic_prime_numbers[:5]]  # Just first 5 primes
+    elif difficulty == 3:
+        num_numbers = min(4, max_items - num_words)  # 4 numbers for level 3
+        if "even" in task or "odd" in task:
+            numbers = [str(num) for num in range(1, 21)]  # Range 1-20
+        else:
+            numbers = [str(num) for num in realistic_prime_numbers[:7]]  # First 7 primes
     else:
-        numbers = [str(num) for num in realistic_prime_numbers[:10]]  # Just first 10 primes
+        num_numbers = min(5 + (difficulty - 4), 7, max_items - num_words)  # 5-7 numbers for level 4+
+        if "even" in task or "odd" in task:
+            numbers = [str(num) for num in range(1, 31)]  # Range 1-30
+        else:
+            numbers = [str(num) for num in realistic_prime_numbers[:10]]  # First 10 primes
+    
+    # Special limit for "Count all numbers" task - max 5 numbers
+    if "Count all numbers" in task:
+        num_numbers = min(num_numbers, 5)
+    
+    num_numbers = max(1, num_numbers)  # At least 1 number
     selected_numbers = random.sample(numbers, min(num_numbers, len(numbers)))
     
     # Build simple audio output: task, then alternating words and numbers with pauses
