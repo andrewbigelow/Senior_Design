@@ -370,79 +370,147 @@
 
 <!-- Start screen: blocks play until user clicks Start -->
         <div id="startOverlay" style="display: none;">
-            <div id="startCard" style="max-width: 700px;">
-                    <h2>Cognitive Overload Training</h2>
-                    <p style="margin: 12px 0;">Welcome! This game challenges your ability to multitask under pressure.</p>
-                    
-                    <div style="text-align: left; margin: 20px 0; padding: 18px; background: #f8f9fa; border-radius: 8px; border: 2px solid #e0e0e0;">
-                        <h3 style="margin: 0 0 12px 0; color: #00457c; font-size: 18px;">📋 How It Works:</h3>
-                        <p style="margin: 8px 0; font-size: 14px;"><strong>The game has TWO phases:</strong></p>
-                        <ul style="margin: 8px 0; padding-left: 24px; line-height: 1.8;">
-                            <li><strong>Phase 1 (Rounds 1-3):</strong> Complete ONLY visual tasks - click images that match the letter shown</li>
-                            <li><strong>Phase 2 (Round 4+):</strong> Audio tasks are ADDED - you must listen to spoken numbers/words while completing the visual task, then answer BOTH!</li>
-                            <li><strong>Difficulty increases:</strong> More images, less time, faster pace</li>
-                            <li><strong>Team communication:</strong> Say a teammate's name to request help during challenges</li>
-                        </ul>
-                    </div>
-                    
-                    <div style="text-align: left; margin: 20px 0; padding: 18px; background: #fff4e6; border-radius: 8px; border: 2px solid #ffb74d;">
-                        <h3 style="margin: 0 0 12px 0; color: #f57c00; font-size: 18px;">🎮 Visual Task Example:</h3>
-                        <p style="margin: 8px 0; font-size: 14px;"><strong>Instruction:</strong> "Click on all images that start with the letter B"</p>
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0;">
-                            <div style="padding: 8px; text-align: center; background: #4CAF50; color: white; border-radius: 6px; font-size: 12px; border: 3px solid #FFD700;">🍌 Banana ✓</div>
-                            <div style="padding: 8px; text-align: center; background: #2196F3; color: white; border-radius: 6px; font-size: 12px;">🚗 Car</div>
-                            <div style="padding: 8px; text-align: center; background: #9C27B0; color: white; border-radius: 6px; font-size: 12px; border: 3px solid #FFD700;">🐝 Bee ✓</div>
-                            <div style="padding: 8px; text-align: center; background: #FF5722; color: white; border-radius: 6px; font-size: 12px;">🌸 Flower</div>
-                        </div>
-                        <p style="margin: 8px 0; font-size: 13px; color: #666;"><em>✓ Click items with gold borders (Banana, Bee) = Correct answer!</em></p>
-                    </div>
-                    
-                    <div style="text-align: left; margin: 20px 0; padding: 18px; background: #e3f2fd; border-radius: 8px; border: 2px solid #42a5f5;">
-                        <h3 style="margin: 0 0 12px 0; color: #1565c0; font-size: 18px;">🎧 Audio Task Example (Round 4+):</h3>
-                        <p style="margin: 8px 0; font-size: 14px;"><strong>What happens:</strong> While you're doing the visual task, you'll hear an audio clip with a task like:</p>
-                        <div style="margin: 12px 0; padding: 12px; background: white; border-left: 4px solid #42a5f5; font-style: italic;">
-                            "Count all even numbers. 7, 12, 3, 18, 5, 20"
-                        </div>
-                        <p style="margin: 8px 0; font-size: 14px;"><strong>Your job:</strong> Remember the numbers you hear, identify which are even (12, 18, 20), and count them = <strong>3</strong></p>
-                        <p style="margin: 8px 0; font-size: 13px; color: #666;"><em>💡 Tip: Write down numbers as you hear them!</em></p>
-                        
-                        <!-- Audio Test -->
-                        <div style="margin-top: 15px; padding: 12px; background: #fff9c4; border-radius: 6px; border: 1px solid #fbc02d;">
-                            <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: bold; color: #f57f17;">🔊 Test Your Audio:</p>
-                            <button id="testAudioBtn" onclick="playTestAudio()" style="padding: 10px 20px; background: #42a5f5; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 8px;">▶ Play Sample Audio Task</button>
-                            <p id="testAudioAnswer" style="margin: 8px 0 0 0; font-size: 13px; color: #555; display: none;">
-                                <strong>Answer:</strong> There are <strong>2</strong> odd numbers (3, 7)
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <div style="text-align: left; margin: 20px 0; padding: 18px; background: #e8f5e9; border-radius: 8px; border: 2px solid #66bb6a;">
-                        <h3 style="margin: 0 0 12px 0; color: #2e7d32; font-size: 18px;">💡 Important Tips:</h3>
-                        <ul style="margin: 8px 0; padding-left: 24px; line-height: 1.8; font-size: 14px;">
-                            <li><strong>Rounds 1-3:</strong> Only complete the visual task (one answer box)</li>
-                            <li><strong>Round 4+:</strong> Complete BOTH visual AND audio tasks (two answer boxes)</li>
-                            <li>Some images can be interpreted differently (e.g., "peanuts" or "nut" - both count!)</li>
-                            <li>Timer decreases as you progress - work quickly!</li>
-                            <li>You must get BOTH tasks correct to advance (when audio is present)</li>
-                            <li>Failed rounds will be repeated - don't worry!</li>
-                        </ul>
-                    </div>
-                    
-                    <div id="teamInfoDisplay" style="margin: 15px 0; padding: 12px; background: #f0f7ff; border-radius: 8px; text-align: left;">
-                        <strong>Team Members:</strong>
-                        <div id="teamList" style="margin-top: 8px; font-size: 14px;"></div>
-                    </div>
-                    <p style="font-size: 14px; color: #555; margin: 10px 0;">💡 <strong>Voice Commands:</strong> Say a teammate's name to request help during challenges!</p>
-                    <div class="team-info">
-                        <strong>Group 6:</strong> Design of a Device for Task Saturation to Improve Safety and Communication in the Operating Room
-                        <br>
-                        Sophie Brown and Andrew Bigelow
-                        <br>
-                        <em>Mentor:</em> Dr. Nicolas Bauer, Anesthesia, UC San Diego Health
-                    </div>
-                    <div style="height:12px"></div>
-                    <button id="startBtn" onclick="startGame()">Start Game</button>
+    <div id="startCard" style="max-width: 700px;">
+
+        <!-- PAGE 1 -->
+        <div class="instructionPage" data-page="1">
+
+            <h2>Cognitive Overload Training</h2>
+
+            <p style="margin: 12px 0;">
+                Welcome! This game challenges your ability to multitask under pressure.
+            </p>
+
+            <div style="text-align:left;margin:20px 0;padding:18px;background:#f8f9fa;border-radius:8px;border:2px solid #e0e0e0;">
+                <h3 style="margin:0 0 12px 0;color:#00457c;font-size:18px;">📋 How It Works:</h3>
+
+                <p style="margin:8px 0;font-size:14px;">
+                    <strong>The game has TWO phases:</strong>
+                </p>
+
+                <ul style="margin:8px 0;padding-left:24px;line-height:1.8;">
+                    <li><strong>Phase 1 (Rounds 1-3):</strong> Complete ONLY visual tasks - click images that match the letter shown</li>
+                    <li><strong>Phase 2 (Round 4+):</strong> Audio tasks are ADDED - you must listen to spoken numbers/words while completing the visual task, then answer BOTH!</li>
+                    <li><strong>Difficulty increases:</strong> More images, less time, faster pace</li>
+                    <li><strong>Team communication:</strong> Say a teammate's name to request help during challenges</li>
+                </ul>
             </div>
+
+        </div>
+
+        <!-- PAGE 2 -->
+        <div class="instructionPage" data-page="2" style="display:none;">
+
+            <div style="text-align:left;margin:20px 0;padding:18px;background:#fff4e6;border-radius:8px;border:2px solid #ffb74d;">
+
+                <h3 style="margin:0 0 12px 0;color:#f57c00;font-size:18px;">🎮 Visual Task Example:</h3>
+
+                <p style="margin:8px 0;font-size:14px;">
+                    <strong>Instruction:</strong> "Click on all images that start with the letter B"
+                </p>
+
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0;">
+                    <div style="padding:8px;text-align:center;background:#4CAF50;color:white;border-radius:6px;font-size:12px;border:3px solid #FFD700;">
+                        🍌 Banana ✓
+                    </div>
+
+                    <div style="padding:8px;text-align:center;background:#2196F3;color:white;border-radius:6px;font-size:12px;">
+                        🚗 Car
+                    </div>
+
+                    <div style="padding:8px;text-align:center;background:#9C27B0;color:white;border-radius:6px;font-size:12px;border:3px solid #FFD700;">
+                        🐝 Bee ✓
+                    </div>
+
+                    <div style="padding:8px;text-align:center;background:#FF5722;color:white;border-radius:6px;font-size:12px;">
+                        🌸 Flower
+                    </div>
+                </div>
+
+                <p style="margin:8px 0;font-size:13px;color:#666;">
+                    <em>✓ Click items with gold borders (Banana, Bee) = Correct answer!</em>
+                </p>
+
+            </div>
+
+        </div>
+
+        <!-- PAGE 3 -->
+        <div class="instructionPage" data-page="3" style="display:none;">
+
+            <div style="text-align:left;margin:20px 0;padding:18px;background:#e3f2fd;border-radius:8px;border:2px solid #42a5f5;">
+
+                <h3 style="margin:0 0 12px 0;color:#1565c0;font-size:18px;">🎧 Audio Task Example (Round 4+):</h3>
+
+                <p style="margin:8px 0;font-size:14px;">
+                    <strong>What happens:</strong> While you're doing the visual task, you'll hear an audio clip with a task like:
+                </p>
+
+                <div style="margin:12px 0;padding:12px;background:white;border-left:4px solid #42a5f5;font-style:italic;">
+                    "Count all even numbers. 7, 12, 3, 18, 5, 20"
+                </div>
+
+                <p style="margin:8px 0;font-size:14px;">
+                    <strong>Your job:</strong> Remember the numbers you hear, identify which are even (12, 18, 20), and count them = <strong>3</strong>
+                </p>
+
+                <p style="margin:8px 0;font-size:13px;color:#666;">
+                    <em>💡 Tip: Write down numbers as you hear them!</em>
+                </p>
+
+                <!-- Audio Test -->
+                <div style="margin-top:15px;padding:12px;background:#fff9c4;border-radius:6px;border:1px solid #fbc02d;">
+
+                    <p style="margin:0 0 8px 0;font-size:14px;font-weight:bold;color:#f57f17;">
+                        🔊 Test Your Audio:
+                    </p>
+
+                    <button id="testAudioBtn" onclick="playTestAudio()"
+                        style="padding:10px 20px;background:#42a5f5;color:white;border:none;border-radius:6px;font-size:14px;cursor:pointer;margin-bottom:8px;">
+                        ▶ Play Sample Audio Task
+                    </button>
+
+                    <p id="testAudioAnswer"
+                       style="margin:8px 0 0 0;font-size:13px;color:#555;display:none;">
+                        <strong>Answer:</strong> There are <strong>2</strong> odd numbers (3, 7)
+                    </p>
+
+                </div>
+            </div>
+
+            <div id="teamInfoDisplay"
+                 style="margin:15px 0;padding:12px;background:#f0f7ff;border-radius:8px;text-align:left;">
+
+                <strong>Team Members:</strong>
+                <div id="teamList" style="margin-top:8px;font-size:14px;"></div>
+
+            </div>
+
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div style="text-align:center;margin-top:20px;">
+            <button id="prevBtn" onclick="changeInstructionPage(-1)" disabled>
+                ◀ Previous
+            </button>
+
+            <button id="nextBtn" onclick="changeInstructionPage(1)">
+                Next ▶
+            </button>
+        </div>
+
+        <!-- Start Button -->
+        <div style="text-align:center;margin-top:25px;">
+            <button id="startBtn" onclick="startGame()"
+                style="padding:18px 50px;background:white;color:#667eea;border:none;border-radius:50px;font-size:22px;font-weight:bold;cursor:pointer;">
+                Start Game
+            </button>
+        </div>
+
+    </div>
+</div>
+
+</div>
         </div>
         <div class="header">
             <h1>Cognitive Overload Training</h1>
@@ -1153,7 +1221,25 @@
                 submitAnswer();
             }
         });
+let instructionPage = 1;
+const totalInstructionPages = document.querySelectorAll(".instructionPage").length;
 
+function changeInstructionPage(direction) {
+
+    document.querySelector(`.instructionPage[data-page="${instructionPage}"]`).style.display = "none";
+
+    instructionPage += direction;
+
+    if (instructionPage < 1) instructionPage = 1;
+    if (instructionPage > totalInstructionPages) instructionPage = totalInstructionPages;
+
+    document.querySelector(`.instructionPage[data-page="${instructionPage}"]`).style.display = "block";
+
+    document.getElementById("prevBtn").disabled = instructionPage === 1;
+
+    document.getElementById("nextBtn").style.display =
+        instructionPage === totalInstructionPages ? "none" : "inline-block";
+}
     // Don't auto-start the round; wait for user to click Start on the overlay.
     </script>
 </body>
