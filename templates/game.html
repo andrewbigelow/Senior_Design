@@ -369,7 +369,7 @@
         </div>
 
 <!-- Start screen: blocks play until user clicks Start -->
-        <div id="startOverlay" style="display: none;">
+<div id="startOverlay" style="display: none;">
     <div id="startCard" style="max-width: 700px;">
 
         <!-- PAGE 1 -->
@@ -413,15 +413,12 @@
                     <div style="padding:8px;text-align:center;background:#4CAF50;color:white;border-radius:6px;font-size:12px;border:3px solid #FFD700;">
                         🍌 Banana ✓
                     </div>
-
                     <div style="padding:8px;text-align:center;background:#2196F3;color:white;border-radius:6px;font-size:12px;">
                         🚗 Car
                     </div>
-
                     <div style="padding:8px;text-align:center;background:#9C27B0;color:white;border-radius:6px;font-size:12px;border:3px solid #FFD700;">
                         🐝 Bee ✓
                     </div>
-
                     <div style="padding:8px;text-align:center;background:#FF5722;color:white;border-radius:6px;font-size:12px;">
                         🌸 Flower
                     </div>
@@ -476,25 +473,50 @@
                     </p>
 
                 </div>
+
             </div>
 
-            <div id="teamInfoDisplay"
-                 style="margin:15px 0;padding:12px;background:#f0f7ff;border-radius:8px;text-align:left;">
+        </div>
 
-                <strong>Team Members:</strong>
-                <div id="teamList" style="margin-top:8px;font-size:14px;"></div>
+        <!-- PAGE 4 -->
+        <div class="instructionPage" data-page="4" style="display:none;">
+
+            <div style="text-align:left;margin:20px 0;padding:18px;background:#f3e5f5;border-radius:8px;border:2px solid #ab47bc;">
+
+                <h3 style="margin:0 0 12px 0;color:#6a1b9a;font-size:18px;">🧠 Remember Your Teammates!</h3>
+
+                <p style="margin:0 0 14px 0;font-size:14px;color:#444;">
+                    Study these facts carefully — <strong>later rounds will quiz you on them!</strong>
+                    You'll need to recall details about your teammates while juggling other tasks. Good luck!
+                </p>
+
+                <div id="teammateFactsDisplay" style="display:flex;flex-direction:column;gap:12px;">
+                    <!-- Populated by JS -->
+                </div>
+
+                <div id="teamInfoDisplay" style="margin:15px 0;padding:12px;background:#f0f7ff;border-radius:8px;text-align:left;">
+                    <strong>Team Members:</strong>
+                    <div id="teamList" style="margin-top:8px;font-size:14px;"></div>
+                </div>
+
+                <div style="margin-top:16px;padding:12px;background:#fff9c4;border-radius:6px;border:1px solid #fbc02d;">
+                    <p style="margin:0;font-size:13px;color:#f57f17;">
+                        💡 <strong>Tip:</strong> Try saying each fact out loud to help it stick in your memory!
+                    </p>
+                </div>
 
             </div>
 
         </div>
 
         <!-- Navigation Buttons -->
-        <div style="text-align:center;margin-top:20px;">
-            <button id="prevBtn" onclick="changeInstructionPage(-1)" disabled>
+        <div style="text-align:center;margin-top:20px;display:flex;gap:12px;justify-content:center;">
+            <button id="prevBtn" onclick="changeInstructionPage(-1)" disabled
+                style="padding:12px 28px;background:#667eea;color:white;border:none;border-radius:50px;font-size:16px;font-weight:bold;cursor:not-allowed;opacity:0.5;">
                 ◀ Previous
             </button>
-
-            <button id="nextBtn" onclick="changeInstructionPage(1)">
+            <button id="nextBtn" onclick="changeInstructionPage(1)"
+                style="padding:12px 28px;background:#667eea;color:white;border:none;border-radius:50px;font-size:16px;font-weight:bold;cursor:pointer;">
                 Next ▶
             </button>
         </div>
@@ -509,9 +531,6 @@
 
     </div>
 </div>
-
-</div>
-        </div>
         <div class="header">
             <h1>Cognitive Overload Training</h1>
             <p>Challenge: Handle multiple tasks while under pressure</p>
@@ -1236,10 +1255,13 @@ function changeInstructionPage(direction) {
     document.querySelector(`.instructionPage[data-page="${instructionPage}"]`).style.display = "block";
 
     document.getElementById("prevBtn").disabled = instructionPage === 1;
+    document.getElementById("prevBtn").style.opacity = instructionPage === 1 ? "0.5" : "1";
+    document.getElementById("prevBtn").style.cursor = instructionPage === 1 ? "not-allowed" : "pointer";
 
     document.getElementById("nextBtn").style.display =
         instructionPage === totalInstructionPages ? "none" : "inline-block";
 }
+// Don't auto-start the round; wait for user to click Start on the overlay.
     // Don't auto-start the round; wait for user to click Start on the overlay.
     </script>
 </body>
