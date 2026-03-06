@@ -246,16 +246,31 @@ socket.on('error', data => {
 
 // ── Input access control ──────────────────────────────────────
 function updateInputAccess() {
-    // All players in the party can interact with the game
-    const canInteract = gameActive;
+    // Host can always interact; helpers only when helpEnabled
+    const canInteract = gameActive && (myRole === 'host' || helpEnabled);
     document.getElementById('submitBtn').disabled = !canInteract;
     document.getElementById('visualAnswerInput').disabled = !canInteract;
     document.getElementById('audioAnswerInput').disabled = !canInteract;
 
     document.querySelectorAll('.clickable-item').forEach(el => {
         el.style.pointerEvents = canInteract ? 'auto' : 'none';
-        el.style.opacity = '1';
+        el.style.opacity = canInteract ? '1' : '0.6';
     });
+
+    // Show a waiting message for locked helpers
+    let lockMsg = document.getElementById('helperLockMsg');
+    if (myRole === 'helper' && !helpEnabled && gameActive) {
+        if (!lockMsg) {
+            lockMsg = document.createElement('div');
+            lockMsg.id = 'helperLockMsg';
+            lockMsg.style.cssText = 'text-align:center;padding:12px;background:#fff3e0;border:2px solid #ff9800;border-radius:8px;margin:10px 0;font-weight:bold;color:#e65100;';
+            document.getElementById('challengeArea').appendChild(lockMsg);
+        }
+        lockMsg.textContent = '🔒 Waiting for the host to call your name for help...';
+        lockMsg.style.display = 'block';
+    } else if (lockMsg) {
+        lockMsg.style.display = 'none';
+    }
 }
 
 // ── Notification banner ───────────────────────────────────────
@@ -317,6 +332,13 @@ function startRound() {
 }
 
 function startGame() {
+    // Host broadcasts start to all players
+    socket.emit('player_start_game');
+}
+window.startGame = startGame;
+
+// All players receive this and enter the game together
+socket.on('sync_start_game', () => {
     const overlay = document.getElementById('startOverlay');
     if (overlay) overlay.style.display = 'none';
     currentRound = 1;
@@ -324,11 +346,9 @@ function startGame() {
     document.getElementById('correctCount').textContent = '0';
     startVoiceListening();
     startRound();
-}
-window.startGame = startGame;
+});
 
-function submitAnswer() {
-    if (!gameActive) return;
+function gatherAnswers() {
     let visualAnswer;
     if (currentVisualTask.display_type === 'clickable') {
         visualAnswer = selectedItems.length > 0 ? selectedItems : [];
@@ -338,10 +358,20 @@ function submitAnswer() {
     const audioAnswer = currentAudioTask
         ? (parseInt(document.getElementById('audioAnswerInput').value) || 0)
         : null;
+    return {visual_answer: visualAnswer, audio_answer: audioAnswer};
+}
 
-    socket.emit('submit_answer', {visual_answer: visualAnswer, audio_answer: audioAnswer});
+function submitAnswer() {
+    if (!gameActive) return;
+    socket.emit('submit_answer', gatherAnswers());
 }
 window.submitAnswer = submitAnswer;
+
+function autoSubmitOnTimeout() {
+    if (!gameActive) return;
+    // Submit whatever is currently filled in
+    socket.emit('submit_answer', gatherAnswers());
+}
 
 function nextRound() {
     // Broadcast to all players in the party so everyone moves together
@@ -370,11 +400,8 @@ function startTimer() {
         if (timeLeft <= 10) el.style.color = '#ff6600';
         if (timeLeft <= 5) el.style.color = '#ff0000';
         if (timeLeft <= 0) {
-            endRound({
-                both_correct: false, visual_correct: false, audio_correct: false,
-                visual_expected: currentVisualTask?.correct_answer,
-                audio_expected: currentAudioTask?.correct_answer
-            });
+            // Auto-submit whatever is in the fields instead of failing
+            autoSubmitOnTimeout();
         }
     }, 1000);
 }
@@ -472,6 +499,7 @@ function generateContent(visualTask) {
 
             itemDiv.onclick = function () {
                 if (!gameActive) return;
+                if (myRole === 'helper' && !helpEnabled) return;
                 if (selectedItems.includes(filename)) {
                     selectedItems = selectedItems.filter(i => i !== filename);
                     itemDiv.classList.remove('selected');
@@ -479,6 +507,8 @@ function generateContent(visualTask) {
                     selectedItems.push(filename);
                     itemDiv.classList.add('selected');
                 }
+                // Sync image selections to all players
+                socket.emit('sync_input', {type: 'selection', selectedItems});
             };
             grid.appendChild(itemDiv);
         });
@@ -506,7 +536,39 @@ function generateContent(visualTask) {
     }
 
     updateInputAccess();
+
+    // Attach input sync listeners for text fields
+    const visualInput = document.getElementById('visualAnswerInput');
+    const audioInput = document.getElementById('audioAnswerInput');
+    visualInput.oninput = function() {
+        socket.emit('sync_input', {type: 'visual', value: visualInput.value});
+    };
+    audioInput.oninput = function() {
+        socket.emit('sync_input', {type: 'audio', value: audioInput.value});
+    };
 }
+
+// ── Receive synced inputs from other players ──────────────────
+let _ignoreSyncInput = false;
+socket.on('sync_input_update', data => {
+    _ignoreSyncInput = true;
+    if (data.type === 'visual') {
+        document.getElementById('visualAnswerInput').value = data.value;
+    } else if (data.type === 'audio') {
+        document.getElementById('audioAnswerInput').value = data.value;
+    } else if (data.type === 'selection') {
+        // Sync image selections
+        selectedItems = data.selectedItems || [];
+        document.querySelectorAll('.clickable-item').forEach(el => {
+            if (selectedItems.includes(el.dataset.item)) {
+                el.classList.add('selected');
+            } else {
+                el.classList.remove('selected');
+            }
+        });
+    }
+    _ignoreSyncInput = false;
+});
 
 // ── Voice recognition ─────────────────────────────────────────
 

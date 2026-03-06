@@ -490,6 +490,27 @@ def handle_request_help(data):
     )
 
 
+@socketio.on('player_start_game')
+def handle_player_start_game():
+    """Any player clicks Start Game on instruction page — broadcast to all"""
+    info = player_sessions.get(request.sid)
+    if not info:
+        return
+    code = info['party_code']
+    socketio.emit('sync_start_game', {}, room=code)
+
+
+@socketio.on('sync_input')
+def handle_sync_input(data):
+    """Broadcast input changes to all other players in the party"""
+    info = player_sessions.get(request.sid)
+    if not info:
+        return
+    code = info['party_code']
+    # Broadcast to everyone except the sender
+    socketio.emit('sync_input_update', data, room=code, include_self=False)
+
+
 @socketio.on('next_round')
 def handle_next_round(data):
     """Host or any player triggers next/retry — broadcast to all"""
