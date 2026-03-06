@@ -145,7 +145,9 @@ socket.on('lobby_update', data => {
 });
 
 socket.on('game_started', () => {
-    // Show instruction pages before starting
+    // All players see the instruction pages together
+    currentRound = 1;
+    correctAnswers = 0;
     showScreen('startOverlay');
     // Fill teammate facts display on page 4
     const factsDiv = document.getElementById('teammateFactsDisplay');
@@ -165,6 +167,8 @@ socket.on('game_started', () => {
 });
 
 socket.on('round_data', data => {
+    // Reset UI for all players (helpers didn't call startRound directly)
+    resetRoundUI();
     currentVisualTask = data.visual_task;
     currentAudioTask = data.audio_task;
     const hasAudio = data.has_audio;
@@ -242,15 +246,15 @@ socket.on('error', data => {
 
 // ── Input access control ──────────────────────────────────────
 function updateInputAccess() {
-    const canInteract = myRole === 'host' || helpEnabled;
-    document.getElementById('submitBtn').disabled = !canInteract || !gameActive;
+    // All players in the party can interact with the game
+    const canInteract = gameActive;
+    document.getElementById('submitBtn').disabled = !canInteract;
     document.getElementById('visualAnswerInput').disabled = !canInteract;
     document.getElementById('audioAnswerInput').disabled = !canInteract;
 
-    // Clickable items
     document.querySelectorAll('.clickable-item').forEach(el => {
         el.style.pointerEvents = canInteract ? 'auto' : 'none';
-        el.style.opacity = canInteract ? '1' : '0.6';
+        el.style.opacity = '1';
     });
 }
 
@@ -279,7 +283,9 @@ function getDifficulty(round) {
 
 // ── Round lifecycle ───────────────────────────────────────────
 
-function startRound() {
+function resetRoundUI() {
+    // Clear any existing timer to prevent stacking
+    clearInterval(timerInterval);
     gameActive = true;
     selectedItems = [];
     helpEnabled = false;
@@ -293,13 +299,21 @@ function startRound() {
     document.getElementById('submitBtn').disabled = false;
     document.getElementById('visualAnswerInput').value = '';
     document.getElementById('audioAnswerInput').value = '';
+    document.getElementById('timer').style.color = '#ff4444';
+}
 
-    // Request round data from server
-    socket.emit('request_round', {
-        difficulty: diff.level,
-        time_limit: diff.timeLimit,
-        round: currentRound
-    });
+function startRound() {
+    resetRoundUI();
+
+    // Only the host requests new round data from the server
+    if (myRole === 'host') {
+        const diff = getDifficulty(currentRound);
+        socket.emit('request_round', {
+            difficulty: diff.level,
+            time_limit: diff.timeLimit,
+            round: currentRound
+        });
+    }
 }
 
 function startGame() {
@@ -330,15 +344,23 @@ function submitAnswer() {
 window.submitAnswer = submitAnswer;
 
 function nextRound() {
-    if (lastRoundSuccess) currentRound++;
-    if (teamMembers.length > 0) startVoiceListening();
-    startRound();
+    // Broadcast to all players in the party so everyone moves together
+    socket.emit('next_round', { advance: lastRoundSuccess });
 }
 window.nextRound = nextRound;
+
+// All players receive this and move in sync
+socket.on('sync_next_round', data => {
+    if (data.advance) currentRound++;
+    if (teamMembers.length > 0) startVoiceListening();
+    startRound();
+});
 
 // ── Timer ─────────────────────────────────────────────────────
 
 function startTimer() {
+    // Always clear old interval first to prevent double-ticking
+    clearInterval(timerInterval);
     const el = document.getElementById('timer');
     el.style.color = '#ff4444';
     el.textContent = timeLeft;
@@ -450,7 +472,6 @@ function generateContent(visualTask) {
 
             itemDiv.onclick = function () {
                 if (!gameActive) return;
-                if (myRole === 'helper' && !helpEnabled) return;
                 if (selectedItems.includes(filename)) {
                     selectedItems = selectedItems.filter(i => i !== filename);
                     itemDiv.classList.remove('selected');

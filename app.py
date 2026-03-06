@@ -490,6 +490,17 @@ def handle_request_help(data):
     )
 
 
+@socketio.on('next_round')
+def handle_next_round(data):
+    """Host or any player triggers next/retry — broadcast to all"""
+    info = player_sessions.get(request.sid)
+    if not info:
+        return
+    code = info['party_code']
+    advance = data.get('advance', False)
+    socketio.emit('sync_next_round', {'advance': advance}, room=code)
+
+
 @socketio.on('disconnect')
 def handle_disconnect():
     info = player_sessions.pop(request.sid, None)
