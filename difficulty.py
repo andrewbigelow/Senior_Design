@@ -51,10 +51,11 @@ def use_accents_by_difficulty(difficulty: int) -> bool:
 
 # Currently, number of words = difficulty * 20
 # Number of spaces between words = number of words - (difficulty * 5)
-def audio_output_by_difficulty(difficulty: int, time_limit: int = 45) -> list[str]:
+def audio_output_by_difficulty(difficulty: int, time_limit: int = 45, current_round: int = None) -> list[str]:
     '''
     Determines the audio output file name based on difficulty level.
     difficulty (int): The difficulty level (1-5).
+    current_round (int, optional): Current game round. Rounds 4-5 restrict to counting-only tasks.
     Returns: str: The name of the output audio file.
     '''
     realistic_prime_numbers = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41]
@@ -62,7 +63,10 @@ def audio_output_by_difficulty(difficulty: int, time_limit: int = 45) -> list[st
     medium_tasks = ["Count all prime numbers", "Add all even numbers", "Add all odd numbers"]
     hard_tasks = ["Add even numbers and subtract odd numbers", "Add odd numbers and subtract even numbers", "Count even numbers and add prime numbers"]
 
-    if difficulty <= 2:
+    # Rounds 4-5: restrict to counting-only tasks regardless of difficulty
+    if current_round and current_round <= 5:
+        task = random.choice(easy_tasks)
+    elif difficulty <= 2:
         task = random.choice(easy_tasks)
     elif difficulty == 3:
         task = random.choice(medium_tasks)

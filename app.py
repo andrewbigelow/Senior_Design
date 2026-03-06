@@ -1,24 +1,41 @@
 from flask import Flask, render_template, jsonify, request, send_file
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
 import random
 import os
 import glob
+import string
 from pathlib import Path
+from io import BytesIO
 import audio_output
 import difficulty
 import word_generator
 
 app = Flask(__name__)
 CORS(app)
+app.config['SECRET_KEY'] = 'cognitive-overload-secret'
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Store current game state
-game_state = {
-    'current_round': 1,
-    'correct_answers': 0,
-    'visual_task': None,
-    'audio_task': None,
-    'audio_file': None,
-    'correct_answer': None
+# ── Party / session management ──────────────────────────────────
+parties = {}           # code -> party dict
+player_sessions = {}   # socket sid -> {party_code, name, role}
+
+
+def generate_party_code():
+    """Generate a unique 4-character alphanumeric party code"""
+    while True:
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        if code not in parties:
+            return code
+
+
+# Scripted visual tasks for first 5 rounds (no addition tasks)
+SCRIPTED_VISUAL_TASKS = {
+    1: 'clipart_images',
+    2: 'clipart_images',
+    3: 'color_count',
+    4: 'clipart_images',
+    5: 'number_count',
 }
 
 # Image aliases for ambiguous interpretations
@@ -100,15 +117,18 @@ def generate_clipart_task(difficulty_level, num_items):
         'letter': letter
     }
 
-def generate_visual_task(difficulty_level):
+def generate_visual_task(difficulty_level, current_round=None):
     """Generate a visual task - randomly choose between different task types"""
     # Scale items based on difficulty
     base_items = 6
     items_per_level = 2
     num_items = base_items + (difficulty_level * items_per_level)
     
-    # Choose a random task type
-    task_type = random.choice(VISUAL_TASK_TYPES)
+    # Use scripted task type for first 5 rounds if round info provided
+    if current_round and current_round in SCRIPTED_VISUAL_TASKS:
+        task_type = SCRIPTED_VISUAL_TASKS[current_round]
+    else:
+        task_type = random.choice(VISUAL_TASK_TYPES)
     
     if task_type == 'clipart_images':
         task = generate_clipart_task(difficulty_level, num_items)
@@ -206,7 +226,7 @@ def generate_visual_task(difficulty_level):
     # Fallback
     return generate_clipart_task(difficulty_level, num_items)
 
-def generate_audio_task(difficulty_level, time_limit=45):
+def generate_audio_task(difficulty_level, time_limit=45, current_round=None):
     """Generate an audio task using the difficulty module"""
     # Clean up old audio files to prevent clutter
     old_files = glob.glob('number_audio_*.mp3')
@@ -218,15 +238,21 @@ def generate_audio_task(difficulty_level, time_limit=45):
     
     slow = difficulty.speech_rate_by_difficulty(difficulty_level)
     accents = difficulty.use_accents_by_difficulty(difficulty_level)
-    audio_content = difficulty.audio_output_by_difficulty(difficulty_level, time_limit)
+    audio_content = difficulty.audio_output_by_difficulty(
+        difficulty_level, time_limit, current_round=current_round
+    )
     
     # Extract the task from the first element and clean it
     task_instruction = audio_content[0] if audio_content else "Count all numbers"
     # Remove trailing punctuation and whitespace for display
     task_instruction_clean = task_instruction.rstrip('. ')
     
-    # Generate audio file
-    audio_filename = audio_output.create_number_audio(audio_content, slow, accents)
+    # Generate audio file (may fail due to network/gTTS issues)
+    try:
+        audio_filename = audio_output.create_number_audio(audio_content, slow, accents)
+    except Exception as e:
+        print(f"[audio] gTTS failed: {e}")
+        raise
     
     # Calculate correct answer based on task
     correct_answer = calculate_audio_answer(audio_content, task_instruction_clean)
@@ -270,107 +296,244 @@ def index():
     """Serve the main game page"""
     return render_template('game.html')
 
-@app.route('/api/start-challenge', methods=['POST'])
-def start_challenge():
-    """Start a new challenge round"""
-    data = request.json
-    difficulty_level = data.get('difficulty', 1)
-    current_round = data.get('round', 1)
-    time_limit = data.get('time_limit', 45)  # Get time limit from request
-    
-    # Generate visual task (always clipart-based)
-    visual_task = generate_visual_task(difficulty_level)
-    game_state['visual_task'] = visual_task
-    
-    # Only include audio task after level 3
-    if current_round > 3:
-        audio_task = generate_audio_task(difficulty_level, time_limit)
-        game_state['audio_task'] = audio_task
-        game_state['audio_file'] = audio_task['audio_file']
-        
-        return jsonify({
-            'visual_task': visual_task,
-            'audio_task': {
-                'instruction': audio_task['instruction'],
-                'audio_url': f'/api/audio/{audio_task["audio_file"]}'
-            },
-            'difficulty': difficulty_level,
-            'has_audio': True
-        })
-    else:
-        # Levels 1-3: No audio task
-        game_state['audio_task'] = None
-        game_state['audio_file'] = None
-        
-        return jsonify({
-            'visual_task': visual_task,
-            'audio_task': None,
-            'difficulty': difficulty_level,
-            'has_audio': False
-        })
 
 @app.route('/api/audio/<filename>')
 def serve_audio(filename):
-    """Serve audio files"""
+    """Serve an audio file, then delete it to keep things clean"""
     audio_path = Path(__file__).parent / filename
     if audio_path.exists():
-        return send_file(audio_path, mimetype='audio/mpeg')
+        # Read into memory so we can delete the file immediately
+        with open(audio_path, 'rb') as f:
+            audio_data = BytesIO(f.read())
+        try:
+            os.remove(audio_path)
+            print(f"[cleanup] Deleted audio file: {filename}")
+        except Exception as e:
+            print(f"[cleanup] Could not delete {filename}: {e}")
+        return send_file(audio_data, mimetype='audio/mpeg', download_name=filename)
     return jsonify({'error': 'Audio file not found'}), 404
 
-@app.route('/api/submit-answer', methods=['POST'])
-def submit_answer():
-    """Check submitted answers"""
-    data = request.json
+
+# ── Socket.IO events ───────────────────────────────────────────
+
+@socketio.on('create_party')
+def handle_create_party(data):
+    name = data.get('name', 'Host').strip() or 'Host'
+    code = generate_party_code()
+    parties[code] = {
+        'host_sid': request.sid,
+        'players': {request.sid: {'name': name, 'role': 'host'}},
+        'state': 'lobby',
+        'round': 0,
+        'scores': {request.sid: 0},
+        'round_data': None,
+    }
+    player_sessions[request.sid] = {'party_code': code, 'name': name, 'role': 'host'}
+    join_room(code)
+    emit('party_created', {'code': code, 'name': name})
+    _broadcast_lobby(code)
+
+
+@socketio.on('join_party')
+def handle_join_party(data):
+    code = data.get('code', '').strip().upper()
+    name = data.get('name', 'Player').strip() or 'Player'
+    if code not in parties:
+        emit('error', {'message': 'Party not found. Check the code and try again.'})
+        return
+    party = parties[code]
+    if party['state'] != 'lobby':
+        emit('error', {'message': 'Game already in progress. Wait for the next session.'})
+        return
+    party['players'][request.sid] = {'name': name, 'role': 'helper'}
+    party['scores'][request.sid] = 0
+    player_sessions[request.sid] = {'party_code': code, 'name': name, 'role': 'helper'}
+    join_room(code)
+    emit('party_joined', {'code': code, 'name': name, 'role': 'helper'})
+    _broadcast_lobby(code)
+
+
+@socketio.on('start_game')
+def handle_start_game():
+    info = player_sessions.get(request.sid)
+    if not info or info['role'] != 'host':
+        return
+    code = info['party_code']
+    party = parties.get(code)
+    if not party:
+        return
+    party['state'] = 'playing'
+    party['round'] = 0
+    socketio.emit('game_started', {}, room=code)
+
+
+@socketio.on('request_round')
+def handle_request_round(data):
+    info = player_sessions.get(request.sid)
+    if not info:
+        return
+    code = info['party_code']
+    party = parties.get(code)
+    if not party:
+        return
+
+    difficulty_level = data.get('difficulty', 1)
+    current_round = data.get('round', 1)
+    time_limit = data.get('time_limit', 45)
+
+    party['round'] = current_round
+
+    # Generate visual task (use scripted types for early rounds)
+    visual_task = generate_visual_task(difficulty_level, current_round=current_round)
+
+    # Audio only after round 3
+    has_audio = current_round > 3
+    audio_task = None
+    if has_audio:
+        try:
+            audio_task = generate_audio_task(
+                difficulty_level, time_limit, current_round=current_round
+            )
+        except Exception as e:
+            print(f"[audio] Generation failed for round {current_round}: {e}")
+            has_audio = False
+
+    party['round_data'] = {
+        'visual_task': visual_task,
+        'audio_task': audio_task,
+        'has_audio': has_audio,
+    }
+
+    response = {
+        'visual_task': visual_task,
+        'audio_task': (
+            {
+                'instruction': audio_task['instruction'],
+                'audio_url': f'/api/audio/{audio_task["audio_file"]}',
+            }
+            if audio_task
+            else None
+        ),
+        'difficulty': difficulty_level,
+        'has_audio': has_audio,
+        'round': current_round,
+    }
+    socketio.emit('round_data', response, room=code)
+
+
+@socketio.on('submit_answer')
+def handle_submit_answer(data):
+    info = player_sessions.get(request.sid)
+    if not info:
+        return
+    code = info['party_code']
+    party = parties.get(code)
+    if not party or not party['round_data']:
+        return
+
     visual_answer = data.get('visual_answer')
     audio_answer = data.get('audio_answer')
-    
+    rd = party['round_data']
+    vt = rd['visual_task']
+    at = rd['audio_task']
+
     visual_correct = False
     audio_correct = False
-    
+
     # Check visual answer
-    if game_state['visual_task']:
-        if game_state['visual_task']['display_type'] == 'clickable':
-            correct_set = set(game_state['visual_task']['correct_answer']) if game_state['visual_task']['correct_answer'] else set()
-            ambiguous_set = set(game_state['visual_task'].get('ambiguous_answer', []))
+    if vt:
+        if vt['display_type'] == 'clickable':
+            correct_set = set(vt['correct_answer']) if vt['correct_answer'] else set()
+            ambiguous_set = set(vt.get('ambiguous_answer', []))
             user_set = set(visual_answer) if visual_answer else set()
-            
-            # Remove ambiguous items from comparison - they're optional
             user_set_filtered = user_set - ambiguous_set
-            
-            # Check if user selected all required items and no incorrect items
             visual_correct = correct_set == user_set_filtered
         else:
-            visual_correct = visual_answer == game_state['visual_task']['correct_answer']
-    
-    # Check audio answer (only if audio task exists)
-    if game_state['audio_task']:
-        audio_correct = audio_answer == game_state['audio_task']['correct_answer']
-        audio_expected = game_state['audio_task']['correct_answer']
+            visual_correct = visual_answer == vt['correct_answer']
+
+    # Check audio answer
+    if at:
+        audio_correct = audio_answer == at['correct_answer']
+        audio_expected = at['correct_answer']
     else:
-        # No audio task = automatically correct
         audio_correct = True
-        audio_expected = 'N/A'  # Not applicable for levels 1-3
-    
+        audio_expected = 'N/A'
+
     both_correct = visual_correct and audio_correct
-    
     if both_correct:
-        game_state['correct_answers'] += 1
-    
-    return jsonify({
+        party['scores'][request.sid] = party['scores'].get(request.sid, 0) + 1
+
+    result = {
         'visual_correct': visual_correct,
         'audio_correct': audio_correct,
         'both_correct': both_correct,
-        'visual_expected': game_state['visual_task']['correct_answer'] if game_state['visual_task'] else None,
+        'visual_expected': vt['correct_answer'] if vt else None,
         'audio_expected': audio_expected,
-        'total_correct': game_state['correct_answers']
-    })
+        'player': info['name'],
+        'total_correct': party['scores'].get(request.sid, 0),
+    }
+    socketio.emit('round_result', result, room=code)
 
-@app.route('/api/next-round', methods=['POST'])
-def next_round():
-    """Advance to next round"""
-    game_state['current_round'] += 1
-    return jsonify({'round': game_state['current_round']})
+
+@socketio.on('request_help')
+def handle_request_help(data):
+    """Host asks a specific helper for help"""
+    info = player_sessions.get(request.sid)
+    if not info:
+        return
+    code = info['party_code']
+    helper_name = data.get('helper_name', '')
+    socketio.emit(
+        'help_requested',
+        {'from': info['name'], 'helper_name': helper_name},
+        room=code,
+    )
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    info = player_sessions.pop(request.sid, None)
+    if not info:
+        return
+    code = info['party_code']
+    party = parties.get(code)
+    if not party:
+        return
+    party['players'].pop(request.sid, None)
+    party['scores'].pop(request.sid, None)
+    leave_room(code)
+
+    if not party['players']:
+        # Last player left – delete the party
+        del parties[code]
+    else:
+        # If the host left, promote someone else
+        if info['role'] == 'host':
+            new_host_sid = next(iter(party['players']))
+            party['players'][new_host_sid]['role'] = 'host'
+            party['host_sid'] = new_host_sid
+            player_sessions[new_host_sid]['role'] = 'host'
+            socketio.emit('role_changed', {'role': 'host'}, room=new_host_sid)
+        _broadcast_lobby(code)
+
+
+def _broadcast_lobby(code):
+    party = parties.get(code)
+    if not party:
+        return
+    players_list = [
+        {'name': p['name'], 'role': p['role']}
+        for p in party['players'].values()
+    ]
+    socketio.emit('lobby_update', {'players': players_list, 'code': code}, room=code)
+
 
 if __name__ == "__main__":
+    # Clean up any leftover audio files on startup
+    for f in glob.glob('number_audio_*.mp3'):
+        try:
+            os.remove(f)
+        except:
+            pass
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    socketio.run(app, host="0.0.0.0", port=port, allow_unsafe_werkzeug=True)
