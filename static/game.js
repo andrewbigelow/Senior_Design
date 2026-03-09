@@ -775,6 +775,10 @@ socket.on('sync_input_update', data => {
 
 // ── Voice recognition ─────────────────────────────────────────
 
+// Track last help request to debounce duplicate triggers
+let _lastHelpName = '';
+let _lastHelpTime = 0;
+
 function handleVoiceCommand(transcript) {
     if (voiceAnswerMode) {
         voiceAnswerText = transcript;
@@ -815,8 +819,15 @@ function handleVoiceCommand(transcript) {
     }
 
     if (bestMatch) {
+        // Debounce: don't fire the same help request within 5 seconds
+        const now = Date.now();
+        if (bestMatch === _lastHelpName && now - _lastHelpTime < 5000) {
+            console.log(`Voice match (debounced): "${transcript}" → ${bestMatch}`);
+            return;
+        }
+        _lastHelpName = bestMatch;
+        _lastHelpTime = now;
         console.log(`Voice match: "${transcript}" → ${bestMatch} (score: ${bestScore.toFixed(2)})`);
-        // Emit help request through server so all clients see it
         socket.emit('request_help', {helper_name: bestMatch});
     }
 }
@@ -883,38 +894,51 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SR();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;   // process speech in real-time as user talks
+    recognition.maxAlternatives = 3;     // more chances to catch the name
     recognition.lang = 'en-US';
     recognition.onresult = function (e) {
-        const t = e.results[e.results.length - 1][0].transcript.toLowerCase().trim();
-        console.log('Voice:', t);
-        handleVoiceCommand(t);
+        // Check every result (interim and final) for a teammate name
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+            const t = e.results[i][0].transcript.toLowerCase().trim();
+            console.log('Voice' + (e.results[i].isFinal ? ' (final)' : ' (interim)') + ':', t);
+            handleVoiceCommand(t);
+            // Also check alternative transcriptions
+            for (let alt = 1; alt < e.results[i].length; alt++) {
+                const altText = e.results[i][alt].transcript.toLowerCase().trim();
+                if (altText !== t) handleVoiceCommand(altText);
+            }
+        }
     };
     recognition.onerror = function (e) {
         console.warn('Voice recognition error:', e.error);
-        // Restart on any recoverable error, not just no-speech
-        if (isListening && gameActive && !voiceAnswerMode) {
-            if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-                console.error('Microphone access denied — voice help unavailable.');
-                isListening = false;
-                return;
-            }
-            // Retry after a short delay to avoid rapid restart loops
-            setTimeout(() => {
-                if (isListening && gameActive) {
-                    try { recognition.start(); } catch (_) {}
-                }
-            }, 500);
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+            console.error('Microphone access denied — voice help unavailable.');
+            isListening = false;
+            return;
         }
+        // Let onend handle the restart — don't double-restart from here
     };
     recognition.onend = function () {
-        if (isListening && gameActive && !voiceAnswerMode) {
-            setTimeout(() => {
-                if (isListening && gameActive) {
-                    try { recognition.start(); } catch (_) {}
-                }
-            }, 300);
+        // Only restart if we're supposed to be listening
+        if (!isListening || !gameActive || voiceAnswerMode) return;
+        // Exponential backoff: if recognition keeps dying quickly, slow down restarts
+        const now = Date.now();
+        const timeSinceLastRestart = now - (recognition._lastRestartTime || 0);
+        if (timeSinceLastRestart < 1000) {
+            // Died too fast — back off longer (2s) to let things settle
+            recognition._restartBackoff = Math.min((recognition._restartBackoff || 1000) * 2, 10000);
+        } else {
+            recognition._restartBackoff = 1000;  // normal 1s delay
         }
+        const delay = recognition._restartBackoff;
+        console.log(`Voice recognition ended, restarting in ${delay}ms`);
+        setTimeout(() => {
+            if (isListening && gameActive && !voiceAnswerMode) {
+                recognition._lastRestartTime = Date.now();
+                try { recognition.start(); } catch (_) {}
+            }
+        }, delay);
     };
 }
 
