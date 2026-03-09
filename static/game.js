@@ -31,6 +31,8 @@ let voiceAnswerMode = false;
 let voiceAnswerText = '';
 let playerCount = 2;          // legacy team setup support
 let helpEnabled = false;      // helper input enable flag
+let isSolo = false;           // single player mode
+let currentRoundType = 'normal'; // 'normal' | 'fact'
 
 // ── Levenshtein distance for fuzzy name matching ───────────────
 function levenshtein(a, b) {
@@ -89,22 +91,40 @@ function showScreen(id) {
 
 // Welcome → Party screen
 window.goToParty = function () {
+    isSolo = false;
     showScreen('partyOverlay');
+};
+
+window.goToSinglePlayer = function () {
+    document.getElementById('soloSetup').style.display = 'block';
+    document.getElementById('welcomeButtons').style.opacity = '0.4';
+    document.getElementById('welcomeButtons').style.pointerEvents = 'none';
+};
+
+window.startSoloGame = function () {
+    const name = document.getElementById('soloNameInput').value.trim();
+    if (!name) { alert('Enter your name!'); return; }
+    myName = name;
+    isSolo = true;
+    myRole = 'host';
+    socket.emit('create_party', {name, solo: true});
 };
 
 window.createParty = function () {
     const name = document.getElementById('hostNameInput').value.trim();
+    const fact = document.getElementById('hostFactInput').value.trim();
     if (!name) { alert('Enter your name first!'); return; }
     myName = name;
-    socket.emit('create_party', {name});
+    socket.emit('create_party', {name, fact});
 };
 
 window.joinParty = function () {
     const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
     const name = document.getElementById('joinNameInput').value.trim();
+    const fact = document.getElementById('joinFactInput').value.trim();
     if (!code || !name) { alert('Enter both a code and your name!'); return; }
     myName = name;
-    socket.emit('join_party', {code, name});
+    socket.emit('join_party', {code, name, fact});
 };
 
 window.hostStartGame = function () {
@@ -116,6 +136,15 @@ window.hostStartGame = function () {
 socket.on('party_created', data => {
     partyCode = data.code;
     myRole = 'host';
+    if (isSolo) {
+        // Solo: skip lobby, go straight to instructions
+        teamMembers = [{name: myName, fact: ''}];
+        currentRound = 1;
+        correctAnswers = 0;
+        showScreen('startOverlay');
+        setupInstructionPage4();
+        return;
+    }
     showScreen('lobbyOverlay');
     document.getElementById('lobbyCode').textContent = partyCode;
     document.getElementById('lobbyRole').textContent = 'Host';
@@ -138,10 +167,11 @@ socket.on('lobby_update', data => {
     list.innerHTML = partyPlayers.map(p =>
         `<div style="margin:4px 0;padding:8px 12px;background:${p.role==='host'?'#e3f2fd':'#f5f5f5'};border-radius:6px;">
             <strong>${p.name}</strong> <span style="color:#888;font-size:13px;">(${p.role})</span>
+            ${p.fact ? `<div style="font-size:12px;color:#666;margin-top:4px;">💡 ${p.fact}</div>` : ''}
         </div>`
     ).join('');
-    // Build teamMembers from party
-    teamMembers = partyPlayers.map(p => ({name: p.name, fact: ''}));
+    // Build teamMembers from party (include facts)
+    teamMembers = partyPlayers.map(p => ({name: p.name, fact: p.fact || ''}));
 });
 
 socket.on('game_started', () => {
@@ -149,26 +179,61 @@ socket.on('game_started', () => {
     currentRound = 1;
     correctAnswers = 0;
     showScreen('startOverlay');
-    // Fill teammate facts display on page 4
+    setupInstructionPage4();
+});
+
+function setupInstructionPage4() {
     const factsDiv = document.getElementById('teammateFactsDisplay');
+    const teamList = document.getElementById('teamList');
+    const page4Content = document.querySelector('.instructionPage[data-page="4"]');
+    if (!page4Content) return;
+
+    if (isSolo) {
+        // Solo mode: hide team communication bullet
+        const teamBullet = document.getElementById('teamCommBullet');
+        if (teamBullet) teamBullet.style.display = 'none';
+        // Solo mode: modify page 4 content
+        page4Content.innerHTML = `
+            <div style="text-align:left;margin:20px 0;padding:18px;background:#e8f5e9;border-radius:8px;border:2px solid #66bb6a;">
+                <h3 style="margin:0 0 12px 0;color:#2e7d32;font-size:18px;">🎯 Solo Mode</h3>
+                <p style="font-size:14px;color:#444;margin:0;">
+                    You're playing solo — no teammates to memorize this time!<br>
+                    Focus on the visual and audio challenges. Good luck!
+                </p>
+            </div>`;
+        return;
+    }
+
+    // Multiplayer: show teammate facts
     if (factsDiv) {
         factsDiv.innerHTML = teamMembers.map(m =>
-            `<div style="padding:10px;background:#f9f9f9;border-radius:6px;border:1px solid #e0e0e0;">
+            `<div style="padding:12px;background:#f9f9f9;border-radius:6px;border:1px solid #e0e0e0;">
                 <strong>${m.name}</strong>
+                ${m.fact
+                    ? `<div style="margin-top:6px;font-size:14px;color:#555;font-style:italic;">"${m.fact}"</div>`
+                    : '<div style="margin-top:4px;font-size:13px;color:#aaa;">No fact shared</div>'}
             </div>`
         ).join('');
     }
-    const teamList = document.getElementById('teamList');
     if (teamList) {
         teamList.innerHTML = teamMembers.map(m =>
-            `<div style="margin:5px 0;">• <strong>${m.name}</strong></div>`
+            `<div style="margin:5px 0;">• <strong>${m.name}</strong>${m.fact ? ` — "${m.fact}"` : ''}</div>`
         ).join('');
     }
-});
+}
 
 socket.on('round_data', data => {
     // Reset UI for all players (helpers didn't call startRound directly)
     resetRoundUI();
+
+    // Handle fact quiz rounds
+    if (data.round_type === 'fact') {
+        currentRoundType = 'fact';
+        showFactRound(data);
+        return;
+    }
+    currentRoundType = 'normal';
+
     currentVisualTask = data.visual_task;
     currentAudioTask = data.audio_task;
     const hasAudio = data.has_audio;
@@ -304,6 +369,23 @@ function resetRoundUI() {
     gameActive = true;
     selectedItems = [];
     helpEnabled = false;
+    currentRoundType = 'normal';
+
+    // Reset fact round UI
+    const factArea = document.getElementById('factQuestionArea');
+    if (factArea) factArea.style.display = 'none';
+
+    // Reset task instruction styling
+    const inst = document.getElementById('taskInstruction');
+    if (inst) {
+        inst.style.background = 'rgba(76,175,80,0.2)';
+        inst.style.color = '#4CAF50';
+    }
+
+    // Restore visual input visibility
+    document.getElementById('visualAnswerInput').parentElement.style.display = 'block';
+    document.getElementById('visualAnswerInput').style.display = 'inline-block';
+
     const diff = getDifficulty(currentRound);
     timeLeft = diff.timeLimit;
 
@@ -315,6 +397,9 @@ function resetRoundUI() {
     document.getElementById('visualAnswerInput').value = '';
     document.getElementById('audioAnswerInput').value = '';
     document.getElementById('timer').style.color = '#ff4444';
+
+    // Update progress bar
+    updateProgressBar();
 }
 
 function startRound() {
@@ -337,6 +422,50 @@ function startGame() {
 }
 window.startGame = startGame;
 
+function showFactRound(data) {
+    const fq = data.fact_question;
+    // Hide regular task areas
+    document.getElementById('contentGrid').innerHTML = '';
+    document.getElementById('visualAnswerInput').parentElement.style.display = 'none';
+    document.getElementById('audioAnswerInput').parentElement.style.display = 'none';
+
+    // Show fact question area
+    const factArea = document.getElementById('factQuestionArea');
+    if (factArea) {
+        factArea.style.display = 'block';
+        document.getElementById('factQuestionText').textContent = fq.question;
+        document.getElementById('factAnswerInput').value = '';
+        setTimeout(() => document.getElementById('factAnswerInput').focus(), 100);
+    }
+
+    // Update task instruction
+    const inst = document.getElementById('taskInstruction');
+    inst.textContent = '\ud83e\udde0 TEAMMATE QUIZ ROUND';
+    inst.style.background = 'rgba(171,71,188,0.2)';
+    inst.style.color = '#ab47bc';
+
+    // Enable submit
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.textContent = 'Submit Answer';
+    submitBtn.disabled = false;
+
+    startTimer();
+}
+
+function updateProgressBar() {
+    const maxRound = 20;
+    const progress = Math.min((currentRound / maxRound) * 100, 100);
+    const fill = document.getElementById('progressFill');
+    if (fill) fill.style.width = progress + '%';
+    const roundEl = document.getElementById('progressRound');
+    if (roundEl) roundEl.textContent = currentRound;
+    const label = document.getElementById('progressLabel');
+    if (label) {
+        const labels = ['Getting Started','Warming Up','Finding Rhythm','Picking Up Speed','In the Zone','Expert Level'];
+        label.textContent = labels[Math.min(Math.floor((currentRound - 1) / 4), labels.length - 1)];
+    }
+}
+
 // All players receive this and enter the game together
 socket.on('sync_start_game', () => {
     const overlay = document.getElementById('startOverlay');
@@ -349,6 +478,10 @@ socket.on('sync_start_game', () => {
 });
 
 function gatherAnswers() {
+    if (currentRoundType === 'fact') {
+        const factInput = document.getElementById('factAnswerInput');
+        return {fact_answer: factInput ? factInput.value.trim() : ''};
+    }
     let visualAnswer;
     if (currentVisualTask.display_type === 'clickable') {
         visualAnswer = selectedItems.length > 0 ? selectedItems : [];
@@ -418,6 +551,32 @@ function endRound(result) {
     const fb = document.getElementById('feedback');
     fb.style.display = 'block';
     fb.innerHTML = '';
+
+    // Fact round results
+    if (result.round_type === 'fact') {
+        const factArea = document.getElementById('factQuestionArea');
+        if (factArea) factArea.style.display = 'none';
+        lastRoundSuccess = true; // Fact rounds always advance
+        if (result.both_correct) {
+            fb.className = 'feedback correct';
+            fb.innerHTML = '🎉 Correct! You really know your teammates!';
+        } else {
+            fb.className = 'feedback incorrect';
+            fb.innerHTML = `<strong>Not quite!</strong><br>The answer was: "<em>${result.fact_expected || '...'}</em>"<br><br><em>Try to remember it for next time!</em>`;
+        }
+        if (result.both_correct) {
+            correctAnswers = result.total_correct;
+            document.getElementById('correctCount').textContent = correctAnswers;
+        }
+        document.getElementById('submitBtn').disabled = true;
+        const nextBtn = document.getElementById('nextRoundBtn');
+        nextBtn.style.display = 'inline-block';
+        nextBtn.disabled = false;
+        nextBtn.textContent = 'Next Challenge';
+        const aiInst = document.getElementById('audioInstruction');
+        if (aiInst) aiInst.remove();
+        return;
+    }
 
     if (result.both_correct) {
         fb.className = 'feedback correct';
@@ -722,6 +881,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter' && gameActive) submitAnswer();
     });
     document.getElementById('audioAnswerInput')?.addEventListener('keypress', e => {
+        if (e.key === 'Enter' && gameActive) submitAnswer();
+    });
+    document.getElementById('factAnswerInput')?.addEventListener('keypress', e => {
         if (e.key === 'Enter' && gameActive) submitAnswer();
     });
 });

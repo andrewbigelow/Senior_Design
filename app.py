@@ -7,6 +7,7 @@ import glob
 import string
 from pathlib import Path
 from io import BytesIO
+from difflib import SequenceMatcher
 import audio_output
 import difficulty
 import word_generator
@@ -41,9 +42,14 @@ SCRIPTED_VISUAL_TASKS = {
 # Image aliases for ambiguous interpretations
 # Maps image filename (without extension) to list of accepted starting letters
 IMAGE_ALIASES = {
-    'peanuts': ['p', 'n'],  # Can be "peanuts" or "nut"
-    'telescope': ['t', 's'],  # Can be "telescope" or "scope"
-    'squirrel': ['s', 'c'],  # Can be "squirrel" or "chipmunk"
+    'peanuts': ['p', 'n'],      # peanuts or nut
+    'telescope': ['t', 's'],    # telescope or scope
+    'squirrel': ['s', 'c'],     # squirrel or chipmunk
+    'greenhouse': ['g', 'h'],   # greenhouse or house
+    'glasses': ['g', 's'],      # glasses or spectacles
+    'balloons': ['b'],           # balloon (singular) also starts with b so fine
+    'kangroo': ['k'],            # intentional typo in filename, still k
+    'icecream': ['i'],           # no space in filename, still i for ice cream
 }
 
 # Visual task templates - weighted to favor clipart images (2.5:1:1:1 ratio)
@@ -314,19 +320,96 @@ def serve_audio(filename):
     return jsonify({'error': 'Audio file not found'}), 404
 
 
+# ── Fact answer matching ────────────────────────────────────────
+
+_STOP_WORDS = frozenset(
+    'i me my he she his her they their them a an the is am are was were '
+    'be been being do does did have has had that this it its of in to for '
+    'on at by with about as just also very really and or but so if then '
+    'than too not no'.split()
+)
+
+
+def _extract_keywords(text):
+    """Pull meaningful words out of a sentence, lowercased, stop-words removed."""
+    words = text.lower().split()
+    # strip punctuation off each word
+    cleaned = [''.join(ch for ch in w if ch.isalnum()) for w in words]
+    return [w for w in cleaned if w and w not in _STOP_WORDS]
+
+
+def _check_fact_answer(answer, fact):
+    """
+    Return True if the player's answer is close enough to the stored fact.
+
+    Uses multiple signals so paraphrases like "king triton" → "he was king
+    triton" or "triton" still match:
+      1. SequenceMatcher ratio on the full strings
+      2. Keyword overlap (Jaccard-style)
+      3. Whether all important fact keywords appear somewhere in the answer
+      4. Whether the answer is a substring of the fact or vice versa
+    """
+    if not answer or not fact:
+        return False
+
+    a = answer.lower().strip()
+    f = fact.lower().strip()
+
+    # 1. Direct SequenceMatcher on full strings
+    seq_ratio = SequenceMatcher(None, a, f).ratio()
+    if seq_ratio >= 0.50:
+        return True
+
+    # 2. Substring containment (either direction)
+    if a in f or f in a:
+        return True
+
+    # 3. Keyword-based scoring
+    a_kw = set(_extract_keywords(answer))
+    f_kw = set(_extract_keywords(fact))
+
+    if not f_kw:
+        return seq_ratio >= 0.40
+
+    # How many fact keywords did the answer mention?
+    overlap = a_kw & f_kw
+    recall = len(overlap) / len(f_kw)  # what fraction of fact words were hit?
+
+    # If the answer nails most of the fact's keywords, accept it
+    if recall >= 0.50:
+        return True
+
+    # 4. Fuzzy per-word matching (catches typos/partial words)
+    #    For each fact keyword, check if any answer keyword is close
+    fuzzy_hits = 0
+    for fword in f_kw:
+        for aword in a_kw:
+            word_sim = SequenceMatcher(None, aword, fword).ratio()
+            if word_sim >= 0.70:
+                fuzzy_hits += 1
+                break
+    fuzzy_recall = fuzzy_hits / len(f_kw)
+    if fuzzy_recall >= 0.50:
+        return True
+
+    return False
+
+
 # ── Socket.IO events ───────────────────────────────────────────
 
 @socketio.on('create_party')
 def handle_create_party(data):
     name = data.get('name', 'Host').strip() or 'Host'
+    fact = data.get('fact', '').strip()
     code = generate_party_code()
     parties[code] = {
         'host_sid': request.sid,
-        'players': {request.sid: {'name': name, 'role': 'host'}},
+        'players': {request.sid: {'name': name, 'role': 'host', 'fact': fact}},
         'state': 'lobby',
         'round': 0,
         'scores': {request.sid: 0},
         'round_data': None,
+        'fact_rounds_done': 0,
     }
     player_sessions[request.sid] = {'party_code': code, 'name': name, 'role': 'host'}
     join_room(code)
@@ -345,7 +428,8 @@ def handle_join_party(data):
     if party['state'] != 'lobby':
         emit('error', {'message': 'Game already in progress. Wait for the next session.'})
         return
-    party['players'][request.sid] = {'name': name, 'role': 'helper'}
+    fact = data.get('fact', '').strip()
+    party['players'][request.sid] = {'name': name, 'role': 'helper', 'fact': fact}
     party['scores'][request.sid] = 0
     player_sessions[request.sid] = {'party_code': code, 'name': name, 'role': 'helper'}
     join_room(code)
@@ -382,6 +466,62 @@ def handle_request_round(data):
     time_limit = data.get('time_limit', 45)
 
     party['round'] = current_round
+
+    # ── Teammate Fact Quiz Round (round 10, 15, 20, …) ──────────
+    num_players = len(party['players'])
+    max_fact_rounds = num_players - 1  # 2 players → 1 quiz, 3 → 2, etc.
+    is_fact_round = (
+        current_round >= 10
+        and (current_round - 10) % 5 == 0
+        and num_players >= 2
+        and party.get('fact_rounds_done', 0) < max_fact_rounds
+    )
+    if is_fact_round:
+        sids_with_facts = [
+            sid for sid in party['players']
+            if party['players'][sid].get('fact')
+        ]
+        if len(sids_with_facts) >= 2:
+            all_sids = list(party['players'].keys())
+            # Simple rotation so nobody gets their own fact
+            targets = sids_with_facts[1:] + [sids_with_facts[0]]
+            assignments = {}
+            for i, sid in enumerate(sids_with_facts):
+                assignments[sid] = targets[i]
+            # Players without facts still participate
+            for sid in all_sids:
+                if sid not in assignments:
+                    available = [s for s in sids_with_facts if s != sid]
+                    assignments[sid] = (
+                        random.choice(available) if available
+                        else sids_with_facts[0]
+                    )
+            party['round_data'] = {
+                'round_type': 'fact',
+                'assignments': assignments,
+            }
+            party['fact_rounds_done'] = party.get('fact_rounds_done', 0) + 1
+            for sid in all_sids:
+                target_sid = assignments[sid]
+                about = party['players'][target_sid]
+                response = {
+                    'round_type': 'fact',
+                    'round': current_round,
+                    'fact_question': {
+                        'about_player': about['name'],
+                        'question': (
+                            f"What fun fact did {about['name']} share "
+                            f"about themselves?"
+                        ),
+                    },
+                    'visual_task': None,
+                    'audio_task': None,
+                    'has_audio': False,
+                }
+                socketio.emit('round_data', response, room=sid)
+            return
+
+    # ── Normal round ────────────────────────────────────────────
 
     # Generate visual task (use scripted types for early rounds)
     visual_task = generate_visual_task(difficulty_level, current_round=current_round)
@@ -434,6 +574,32 @@ def handle_submit_answer(data):
     visual_answer = data.get('visual_answer')
     audio_answer = data.get('audio_answer')
     rd = party['round_data']
+
+    # ── Fact round answer ───────────────────────────────────────
+    if isinstance(rd, dict) and rd.get('round_type') == 'fact':
+        fact_answer = data.get('fact_answer', '').strip()
+        assignment = rd.get('assignments', {}).get(request.sid)
+        if not assignment:
+            return
+        correct_fact = party['players'].get(assignment, {}).get('fact', '')
+        fact_correct = _check_fact_answer(fact_answer, correct_fact)
+        if fact_correct:
+            party['scores'][request.sid] = (
+                party['scores'].get(request.sid, 0) + 1
+            )
+        result = {
+            'round_type': 'fact',
+            'both_correct': fact_correct,
+            'visual_correct': True,
+            'audio_correct': True,
+            'fact_expected': correct_fact,
+            'player': info['name'],
+            'total_correct': party['scores'].get(request.sid, 0),
+        }
+        socketio.emit('round_result', result, room=request.sid)
+        return
+
+    # ── Normal round answer ─────────────────────────────────────
     vt = rd['visual_task']
     at = rd['audio_task']
 
@@ -554,7 +720,7 @@ def _broadcast_lobby(code):
     if not party:
         return
     players_list = [
-        {'name': p['name'], 'role': p['role']}
+        {'name': p['name'], 'role': p['role'], 'fact': p.get('fact', '')}
         for p in party['players'].values()
     ]
     socketio.emit('lobby_update', {'players': players_list, 'code': code}, room=code)
