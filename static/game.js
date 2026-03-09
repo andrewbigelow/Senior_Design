@@ -48,24 +48,64 @@ function levenshtein(a, b) {
     return dp[m][n];
 }
 
+// Simple phonetic code to handle pronunciation discrepancies
+function phoneticCode(str) {
+    str = str.toLowerCase().trim();
+    if (!str) return '';
+    // Map common phonetic equivalences
+    let s = str
+        .replace(/^[^a-z]+|[^a-z]+$/g, '')
+        .replace(/ph/g, 'f')
+        .replace(/ck/g, 'k')
+        .replace(/sh/g, 'S')
+        .replace(/th/g, 'T')
+        .replace(/gh/g, '')
+        .replace(/kn/g, 'n')
+        .replace(/wr/g, 'r')
+        .replace(/wh/g, 'w')
+        .replace(/[aeiou]/g, 'a')  // collapse vowels
+        .replace(/aa+/g, 'a')
+        .replace(/([^a])\1+/g, '$1');  // collapse repeated consonants
+    return s;
+}
+
 function nameSimilarity(spoken, actualName) {
     spoken = spoken.toLowerCase().trim();
     actualName = actualName.toLowerCase().trim();
     if (spoken === actualName) return 1.0;
-    if (spoken.includes(actualName) || actualName.includes(spoken)) return 0.9;
+    if (spoken.includes(actualName) || actualName.includes(spoken)) return 0.95;
+
+    // Phonetic match — handles pronunciation discrepancies like Sean/Shawn, Sara/Sarah
+    const spokenPhonetic = phoneticCode(spoken);
+    const namePhonetic = phoneticCode(actualName);
+    if (spokenPhonetic && namePhonetic && spokenPhonetic === namePhonetic) return 0.92;
 
     // Try matching individual words in the spoken phrase
     const words = spoken.split(/\s+/);
     let bestWordScore = 0;
     for (const w of words) {
+        // Direct Levenshtein on the word
         const dist = levenshtein(w, actualName);
         const maxLen = Math.max(w.length, actualName.length);
         const score = maxLen > 0 ? 1 - dist / maxLen : 0;
         if (score > bestWordScore) bestWordScore = score;
-    }
-    if (bestWordScore >= 0.5) return bestWordScore;
 
-    // Prefix match
+        // Phonetic comparison per word
+        const wPhonetic = phoneticCode(w);
+        if (wPhonetic && namePhonetic && wPhonetic === namePhonetic) {
+            bestWordScore = Math.max(bestWordScore, 0.90);
+        }
+        // Partial phonetic: check Levenshtein on phonetic codes too
+        if (wPhonetic && namePhonetic) {
+            const pDist = levenshtein(wPhonetic, namePhonetic);
+            const pMax = Math.max(wPhonetic.length, namePhonetic.length);
+            const pScore = pMax > 0 ? 1 - pDist / pMax : 0;
+            if (pScore > 0.6) bestWordScore = Math.max(bestWordScore, pScore * 0.85);
+        }
+    }
+    if (bestWordScore >= 0.4) return bestWordScore;
+
+    // Prefix match (first 3-4 chars)
     const minLen = Math.min(spoken.length, actualName.length);
     if (minLen >= 3) {
         const p = Math.min(4, minLen);
@@ -290,10 +330,14 @@ socket.on('help_requested', data => {
     const helperName = data.helper_name;
     const fromName = data.from;
     // If I'm the helper being called, enable my inputs
-    if (myRole === 'helper' && myName.toLowerCase() === helperName.toLowerCase()) {
-        helpEnabled = true;
-        updateInputAccess();
-        showNotification(`${fromName} asked for your help!`, '#FF9800');
+    // Use fuzzy matching so slight name discrepancies still work
+    if (myRole === 'helper') {
+        const similarity = nameSimilarity(helperName, myName);
+        if (similarity >= 0.5) {
+            helpEnabled = true;
+            updateInputAccess();
+            showNotification(`${fromName} asked for your help!`, '#FF9800');
+        }
     } else if (myRole === 'host') {
         showNotification(`Asked ${helperName} for help`, '#4CAF50');
     }
@@ -739,21 +783,39 @@ function handleVoiceCommand(transcript) {
     }
     if (!gameActive) return;
 
-    const words = transcript.toLowerCase().split(/\s+/);
+    // Strip filler words that speech API may prepend
+    const cleaned = transcript.toLowerCase()
+        .replace(/^(hey|yo|ok|okay|um|uh|like)\s+/i, '')
+        .trim();
+    const words = cleaned.split(/\s+/);
     let bestMatch = null;
-    let bestScore = 0.5;  // lenient threshold
+    let bestScore = 0.35;  // lower threshold to catch pronunciation variants
 
     for (const member of teamMembers) {
-        // Try full transcript and individual words
-        const fullScore = nameSimilarity(transcript, member.name);
+        // Skip matching against your own name
+        if (member.name.toLowerCase() === myName.toLowerCase()) continue;
+
+        // Try full cleaned transcript
+        const fullScore = nameSimilarity(cleaned, member.name);
         if (fullScore > bestScore) { bestScore = fullScore; bestMatch = member.name; }
+
+        // Try individual words
         for (const w of words) {
+            if (w.length < 2) continue;  // skip tiny filler words
             const s = nameSimilarity(w, member.name);
             if (s > bestScore) { bestScore = s; bestMatch = member.name; }
+        }
+
+        // Try two-word combinations for multi-word names
+        for (let i = 0; i < words.length - 1; i++) {
+            const combo = words[i] + ' ' + words[i + 1];
+            const cs = nameSimilarity(combo, member.name);
+            if (cs > bestScore) { bestScore = cs; bestMatch = member.name; }
         }
     }
 
     if (bestMatch) {
+        console.log(`Voice match: "${transcript}" → ${bestMatch} (score: ${bestScore.toFixed(2)})`);
         // Emit help request through server so all clients see it
         socket.emit('request_help', {helper_name: bestMatch});
     }
