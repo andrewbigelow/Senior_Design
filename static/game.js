@@ -891,13 +891,29 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
         handleVoiceCommand(t);
     };
     recognition.onerror = function (e) {
-        if (e.error === 'no-speech' && isListening && gameActive) {
-            try { recognition.start(); } catch (_) {}
+        console.warn('Voice recognition error:', e.error);
+        // Restart on any recoverable error, not just no-speech
+        if (isListening && gameActive && !voiceAnswerMode) {
+            if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                console.error('Microphone access denied — voice help unavailable.');
+                isListening = false;
+                return;
+            }
+            // Retry after a short delay to avoid rapid restart loops
+            setTimeout(() => {
+                if (isListening && gameActive) {
+                    try { recognition.start(); } catch (_) {}
+                }
+            }, 500);
         }
     };
     recognition.onend = function () {
         if (isListening && gameActive && !voiceAnswerMode) {
-            try { recognition.start(); } catch (_) {}
+            setTimeout(() => {
+                if (isListening && gameActive) {
+                    try { recognition.start(); } catch (_) {}
+                }
+            }, 300);
         }
     };
 }
