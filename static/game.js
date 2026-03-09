@@ -33,6 +33,7 @@ let playerCount = 2;          // legacy team setup support
 let helpEnabled = false;      // helper input enable flag
 let isSolo = false;           // single player mode
 let currentRoundType = 'normal'; // 'normal' | 'fact'
+let permissionedPlayers = new Set();  // names of players who currently have access
 
 // ── Levenshtein distance for fuzzy name matching ───────────────
 function levenshtein(a, b) {
@@ -84,6 +85,8 @@ function nameSimilarity(spoken, actualName) {
     const words = spoken.split(/\s+/);
     let bestWordScore = 0;
     for (const w of words) {
+        // Skip very short words — they cause false positives ("the", "can", etc.)
+        if (w.length < 3) continue;
         // Direct Levenshtein on the word
         const dist = levenshtein(w, actualName);
         const maxLen = Math.max(w.length, actualName.length);
@@ -100,22 +103,20 @@ function nameSimilarity(spoken, actualName) {
             const pDist = levenshtein(wPhonetic, namePhonetic);
             const pMax = Math.max(wPhonetic.length, namePhonetic.length);
             const pScore = pMax > 0 ? 1 - pDist / pMax : 0;
-            if (pScore > 0.6) bestWordScore = Math.max(bestWordScore, pScore * 0.85);
+            if (pScore > 0.7) bestWordScore = Math.max(bestWordScore, pScore * 0.85);
         }
     }
-    if (bestWordScore >= 0.4) return bestWordScore;
+    if (bestWordScore >= 0.6) return bestWordScore;
 
-    // Prefix match (first 3-4 chars)
+    // Prefix match (first 3-4 chars) — only if name is 4+ chars to avoid short-name false positives
     const minLen = Math.min(spoken.length, actualName.length);
-    if (minLen >= 3) {
+    if (minLen >= 4) {
         const p = Math.min(4, minLen);
         if (spoken.substring(0, p) === actualName.substring(0, p)) return 0.8;
     }
 
-    // Character overlap
-    let matchCount = 0;
-    for (const ch of spoken) if (actualName.includes(ch)) matchCount++;
-    return matchCount / Math.max(spoken.length, actualName.length);
+    // No character overlap fallback — too many false positives
+    return 0;
 }
 
 // ── Party UI helpers ───────────────────────────────────────────
@@ -329,17 +330,24 @@ socket.on('round_result', data => {
 socket.on('help_requested', data => {
     const helperName = data.helper_name;
     const fromName = data.from;
-    // If I'm the helper being called, enable my inputs
-    // Use fuzzy matching so slight name discrepancies still work
-    if (myRole === 'helper') {
+    // If I'm the one being called and I don't have access yet, enable me
+    if (!helpEnabled && myRole !== 'host') {
         const similarity = nameSimilarity(helperName, myName);
         if (similarity >= 0.5) {
             helpEnabled = true;
             updateInputAccess();
             showNotification(`${fromName} asked for your help!`, '#FF9800');
         }
-    } else if (myRole === 'host') {
-        showNotification(`Asked ${helperName} for help`, '#4CAF50');
+    }
+    // Everyone tracks who is now permissioned
+    permissionedPlayers.add(helperName.toLowerCase());
+    // Host sees confirmation
+    if (myRole === 'host' || helpEnabled) {
+        if (fromName !== myName) {
+            showNotification(`${fromName} asked ${helperName} for help`, '#4CAF50');
+        } else {
+            showNotification(`Asked ${helperName} for help`, '#4CAF50');
+        }
     }
 });
 
@@ -414,6 +422,9 @@ function resetRoundUI() {
     selectedItems = [];
     helpEnabled = false;
     currentRoundType = 'normal';
+    // Reset permissions each round — only host starts with access
+    permissionedPlayers = new Set();
+    permissionedPlayers.add(myName.toLowerCase());
 
     // Reset fact round UI
     const factArea = document.getElementById('factQuestionArea');
@@ -786,6 +797,8 @@ function handleVoiceCommand(transcript) {
         return;
     }
     if (!gameActive) return;
+    // Only players who have access (permissioned) can request help
+    if (myRole === 'helper' && !helpEnabled) return;
 
     // Strip filler words that speech API may prepend
     const cleaned = transcript.toLowerCase()
@@ -793,11 +806,14 @@ function handleVoiceCommand(transcript) {
         .trim();
     const words = cleaned.split(/\s+/);
     let bestMatch = null;
-    let bestScore = 0.35;  // lower threshold to catch pronunciation variants
+    let bestScore = 0.65;  // high threshold — must actually sound like the name
 
     for (const member of teamMembers) {
-        // Skip matching against your own name
-        if (member.name.toLowerCase() === myName.toLowerCase()) continue;
+        const memberLower = member.name.toLowerCase();
+        // Skip yourself
+        if (memberLower === myName.toLowerCase()) continue;
+        // Skip players who already have access
+        if (permissionedPlayers.has(memberLower)) continue;
 
         // Try full cleaned transcript
         const fullScore = nameSimilarity(cleaned, member.name);
@@ -805,7 +821,7 @@ function handleVoiceCommand(transcript) {
 
         // Try individual words
         for (const w of words) {
-            if (w.length < 2) continue;  // skip tiny filler words
+            if (w.length < 3) continue;  // skip tiny words
             const s = nameSimilarity(w, member.name);
             if (s > bestScore) { bestScore = s; bestMatch = member.name; }
         }
@@ -822,7 +838,6 @@ function handleVoiceCommand(transcript) {
         // Debounce: don't fire the same help request within 5 seconds
         const now = Date.now();
         if (bestMatch === _lastHelpName && now - _lastHelpTime < 5000) {
-            console.log(`Voice match (debounced): "${transcript}" → ${bestMatch}`);
             return;
         }
         _lastHelpName = bestMatch;
