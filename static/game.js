@@ -479,6 +479,7 @@ window.startGame = startGame;
 
 function showFactRound(data) {
     const fq = data.fact_question;
+
     // Hide regular task areas
     document.getElementById('contentGrid').innerHTML = '';
     document.getElementById('visualAnswerInput').parentElement.style.display = 'none';
@@ -490,21 +491,68 @@ function showFactRound(data) {
         factArea.style.display = 'block';
         document.getElementById('factQuestionText').textContent = fq.question;
         document.getElementById('factAnswerInput').value = '';
-        setTimeout(() => document.getElementById('factAnswerInput').focus(), 100);
+    }
+
+    // Build multiple choice buttons (only host can answer)
+    const choicesArea = document.getElementById('factChoicesArea');
+    choicesArea.innerHTML = '';
+
+    if (fq.choices && fq.choices.length > 0) {
+        fq.choices.forEach(choice => {
+            const btn = document.createElement('button');
+            btn.textContent = choice;
+            btn.style.cssText = `
+                padding: 14px 20px;
+                font-size: 16px;
+                border: 2px solid #ab47bc;
+                border-radius: 8px;
+                background: #fff;
+                color: #333;
+                cursor: ${myRole === 'host' ? 'pointer' : 'default'};
+                text-align: left;
+                transition: background 0.15s, color 0.15s;
+                opacity: ${myRole === 'host' ? '1' : '0.75'};
+            `;
+
+            if (myRole === 'host') {
+                btn.addEventListener('click', () => {
+                    // Deselect all buttons
+                    choicesArea.querySelectorAll('button').forEach(b => {
+                        b.style.background = '#fff';
+                        b.style.color = '#333';
+                        b.style.borderColor = '#ab47bc';
+                    });
+                    // Highlight selected
+                    btn.style.background = '#ab47bc';
+                    btn.style.color = '#fff';
+                    btn.style.borderColor = '#7b1fa2';
+                    // Store answer
+                    document.getElementById('factAnswerInput').value = choice;
+                });
+            }
+
+            choicesArea.appendChild(btn);
+        });
     }
 
     // Update task instruction
     const inst = document.getElementById('taskInstruction');
-    inst.textContent = '\ud83e\udde0 TEAMMATE QUIZ ROUND';
+    inst.textContent = '🧠 TEAMMATE QUIZ ROUND';
     inst.style.background = 'rgba(171,71,188,0.2)';
     inst.style.color = '#ab47bc';
 
-    // Enable submit
+    // Only host can submit; helpers see a waiting message
     const submitBtn = document.getElementById('submitBtn');
-    submitBtn.textContent = 'Submit Answer';
-    submitBtn.disabled = false;
+    if (myRole === 'host') {
+        submitBtn.textContent = 'Submit Answer';
+        submitBtn.disabled = false;
+    } else {
+        submitBtn.textContent = '⏳ Host is answering...';
+        submitBtn.disabled = true;
+    }
 
     startTimer();
+
 }
 
 function updateProgressBar() {
@@ -999,8 +1047,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('audioAnswerInput')?.addEventListener('keypress', e => {
         if (e.key === 'Enter' && gameActive) submitAnswer();
-    });
-    document.getElementById('factAnswerInput')?.addEventListener('keypress', e => {
-        if (e.key === 'Enter' && gameActive) submitAnswer();
+
     });
 });
