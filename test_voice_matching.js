@@ -30,15 +30,33 @@ function phoneticCode(str) {
         .replace(/ph/g, 'f')
         .replace(/ck/g, 'k')
         .replace(/sh/g, 'S')
+        .replace(/ch/g, 'C')
         .replace(/th/g, 'T')
         .replace(/gh/g, '')
         .replace(/kn/g, 'n')
         .replace(/wr/g, 'r')
         .replace(/wh/g, 'w')
+        .replace(/gn/g, 'n')
+        .replace(/mb$/g, 'm')
+        .replace(/ce/g, 'se')
+        .replace(/ci/g, 'si')
+        .replace(/cy/g, 'sy')
+        .replace(/ge/g, 'je')
+        .replace(/gi/g, 'ji')
+        .replace(/x/g, 'ks')
+        .replace(/qu/g, 'kw')
         .replace(/[aeiou]/g, 'a')
         .replace(/aa+/g, 'a')
         .replace(/([^a])\1+/g, '$1');
     return s;
+}
+
+function stripSuffix(word) {
+    return word
+        .replace(/'s$/, '')
+        .replace(/s$/, '')
+        .replace(/ing$/, '')
+        .replace(/ed$/, '');
 }
 
 function nameSimilarity(spoken, actualName) {
@@ -47,71 +65,94 @@ function nameSimilarity(spoken, actualName) {
     if (spoken === actualName) return 1.0;
     if (spoken.includes(actualName) || actualName.includes(spoken)) return 0.95;
 
+    const spokenStripped = stripSuffix(spoken);
+    const nameStripped = stripSuffix(actualName);
+    if (spokenStripped === nameStripped) return 0.97;
+    if (spokenStripped.includes(nameStripped) || nameStripped.includes(spokenStripped)) return 0.93;
+
     const spokenPhonetic = phoneticCode(spoken);
     const namePhonetic = phoneticCode(actualName);
     if (spokenPhonetic && namePhonetic && spokenPhonetic === namePhonetic) return 0.92;
 
     const words = spoken.split(/\s+/);
     let bestWordScore = 0;
-    for (const w of words) {
-        const dist = levenshtein(w, actualName);
-        const maxLen = Math.max(w.length, actualName.length);
-        const score = maxLen > 0 ? 1 - dist / maxLen : 0;
-        if (score > bestWordScore) bestWordScore = score;
 
-        const wPhonetic = phoneticCode(w);
-        if (wPhonetic && namePhonetic && wPhonetic === namePhonetic) {
-            bestWordScore = Math.max(bestWordScore, 0.90);
+    const checkWord = (w) => {
+        if (w.length < 2) return;
+        for (const candidate of [w, stripSuffix(w)]) {
+            if (!candidate) continue;
+            const dist = levenshtein(candidate, actualName);
+            const maxLen = Math.max(candidate.length, actualName.length);
+            const score = maxLen > 0 ? 1 - dist / maxLen : 0;
+            if (score > bestWordScore) bestWordScore = score;
+
+            if (nameStripped !== actualName) {
+                const dist2 = levenshtein(candidate, nameStripped);
+                const maxLen2 = Math.max(candidate.length, nameStripped.length);
+                const score2 = maxLen2 > 0 ? 1 - dist2 / maxLen2 : 0;
+                if (score2 > bestWordScore) bestWordScore = score2;
+            }
+
+            const wPhonetic = phoneticCode(candidate);
+            if (wPhonetic && namePhonetic && wPhonetic === namePhonetic) {
+                bestWordScore = Math.max(bestWordScore, 0.90);
+            }
+            if (wPhonetic && namePhonetic) {
+                const pDist = levenshtein(wPhonetic, namePhonetic);
+                const pMax = Math.max(wPhonetic.length, namePhonetic.length);
+                const pScore = pMax > 0 ? 1 - pDist / pMax : 0;
+                if (pScore > 0.65) bestWordScore = Math.max(bestWordScore, pScore * 0.88);
+            }
         }
-        if (wPhonetic && namePhonetic) {
-            const pDist = levenshtein(wPhonetic, namePhonetic);
-            const pMax = Math.max(wPhonetic.length, namePhonetic.length);
-            const pScore = pMax > 0 ? 1 - pDist / pMax : 0;
-            if (pScore > 0.6) bestWordScore = Math.max(bestWordScore, pScore * 0.85);
-        }
+    };
+
+    for (const w of words) {
+        checkWord(w);
     }
-    if (bestWordScore >= 0.4) return bestWordScore;
+
+    for (let i = 0; i < words.length - 1; i++) {
+        checkWord(words[i] + words[i + 1]);
+        checkWord(words[i] + ' ' + words[i + 1]);
+    }
+    for (let i = 0; i < words.length - 2; i++) {
+        checkWord(words[i] + words[i + 1] + words[i + 2]);
+    }
+
+    if (bestWordScore >= 0.55) return bestWordScore;
 
     const minLen = Math.min(spoken.length, actualName.length);
-    if (minLen >= 3) {
+    if (minLen >= 4) {
         const p = Math.min(4, minLen);
         if (spoken.substring(0, p) === actualName.substring(0, p)) return 0.8;
     }
+    for (const w of words) {
+        if (w.length >= 3 && actualName.length >= 3) {
+            const p = Math.min(3, w.length, actualName.length);
+            if (w.substring(0, p) === actualName.substring(0, p)) return 0.7;
+        }
+    }
 
-    let matchCount = 0;
-    for (const ch of spoken) if (actualName.includes(ch)) matchCount++;
-    return matchCount / Math.max(spoken.length, actualName.length);
+    return 0;
 }
 
 /**
  * Simulate handleVoiceCommand: given a transcript, myName, and teamMembers,
  * return the matched helper name or null.
+ * isFinal defaults to true for test purposes (final results have lower threshold).
  */
-function simulateVoiceCommand(transcript, myName, teamMembers) {
+function simulateVoiceCommand(transcript, myName, teamMembers, isFinal = true) {
     const cleaned = transcript.toLowerCase()
-        .replace(/^(hey|yo|ok|okay|um|uh|like)\s+/i, '')
+        .replace(/^(hey|yo|ok|okay|um|uh|like|so|the|a)\s+/i, '')
         .trim();
-    const words = cleaned.split(/\s+/);
+    const threshold = isFinal ? 0.55 : 0.62;
     let bestMatch = null;
-    let bestScore = 0.35;
+    let bestScore = threshold;
 
     for (const member of teamMembers) {
         if (member.name.toLowerCase() === myName.toLowerCase()) continue;
 
-        const fullScore = nameSimilarity(cleaned, member.name);
-        if (fullScore > bestScore) { bestScore = fullScore; bestMatch = member.name; }
-
-        for (const w of words) {
-            if (w.length < 2) continue;
-            const s = nameSimilarity(w, member.name);
-            if (s > bestScore) { bestScore = s; bestMatch = member.name; }
-        }
-
-        for (let i = 0; i < words.length - 1; i++) {
-            const combo = words[i] + ' ' + words[i + 1];
-            const cs = nameSimilarity(combo, member.name);
-            if (cs > bestScore) { bestScore = cs; bestMatch = member.name; }
-        }
+        const score = nameSimilarity(cleaned, member.name);
+        if (score > bestScore) { bestScore = score; bestMatch = member.name; }
     }
 
     return { match: bestMatch, score: bestScore };
@@ -273,6 +314,32 @@ const edgeCases = [
 ];
 
 for (const [transcript, myName, expected, desc] of edgeCases) {
+    const result = simulateVoiceCommand(transcript, myName, team);
+    if (expected === null) {
+        assert(result.match === null, `${desc}: no match`,
+            `got "${result.match}" (score ${result.score.toFixed(2)})`);
+    } else {
+        assert(result.match === expected,
+            `${desc}: → ${expected} (score ${result.score.toFixed(2)})`,
+            `got "${result.match}" instead of "${expected}"`);
+    }
+}
+
+// ================================================================
+console.log('\n🔗 ADJACENT WORD JOIN TESTS');
+console.log('─'.repeat(50));
+// ================================================================
+
+// Speech API often splits names into multiple words
+const joinTests = [
+    ['and drew',        'Sarah', 'Andrew', '"and drew" joins → Andrew'],
+    ['and you',         'Sarah', 'Andrew', '"and you" close to Andrew (phonetic)'],
+    ['sir ah',          'Andrew', 'Sarah', '"sir ah" joins → Sarah'],
+    ["sarah's",         'Andrew', 'Sarah', '"sarah\'s" with possessive → Sarah'],
+    ['johns',           'Andrew', 'John',  '"johns" with plural → John'],
+];
+
+for (const [transcript, myName, expected, desc] of joinTests) {
     const result = simulateVoiceCommand(transcript, myName, team);
     if (expected === null) {
         assert(result.match === null, `${desc}: no match`,

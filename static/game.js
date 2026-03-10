@@ -49,25 +49,43 @@ function levenshtein(a, b) {
     return dp[m][n];
 }
 
-// Simple phonetic code to handle pronunciation discrepancies
+// Phonetic code to handle pronunciation discrepancies
 function phoneticCode(str) {
     str = str.toLowerCase().trim();
     if (!str) return '';
-    // Map common phonetic equivalences
     let s = str
         .replace(/^[^a-z]+|[^a-z]+$/g, '')
         .replace(/ph/g, 'f')
         .replace(/ck/g, 'k')
         .replace(/sh/g, 'S')
+        .replace(/ch/g, 'C')
         .replace(/th/g, 'T')
         .replace(/gh/g, '')
         .replace(/kn/g, 'n')
         .replace(/wr/g, 'r')
         .replace(/wh/g, 'w')
+        .replace(/gn/g, 'n')
+        .replace(/mb$/g, 'm')
+        .replace(/ce/g, 'se')
+        .replace(/ci/g, 'si')
+        .replace(/cy/g, 'sy')
+        .replace(/ge/g, 'je')
+        .replace(/gi/g, 'ji')
+        .replace(/x/g, 'ks')
+        .replace(/qu/g, 'kw')
         .replace(/[aeiou]/g, 'a')  // collapse vowels
         .replace(/aa+/g, 'a')
         .replace(/([^a])\1+/g, '$1');  // collapse repeated consonants
     return s;
+}
+
+// Strip common suffixes/possessives that speech-to-text adds
+function stripSuffix(word) {
+    return word
+        .replace(/'s$/, '')
+        .replace(/s$/, '')
+        .replace(/ing$/, '')
+        .replace(/ed$/, '');
 }
 
 function nameSimilarity(spoken, actualName) {
@@ -75,6 +93,12 @@ function nameSimilarity(spoken, actualName) {
     actualName = actualName.toLowerCase().trim();
     if (spoken === actualName) return 1.0;
     if (spoken.includes(actualName) || actualName.includes(spoken)) return 0.95;
+
+    // Also try with suffix stripping (speech API often adds "'s", "s", etc.)
+    const spokenStripped = stripSuffix(spoken);
+    const nameStripped = stripSuffix(actualName);
+    if (spokenStripped === nameStripped) return 0.97;
+    if (spokenStripped.includes(nameStripped) || nameStripped.includes(spokenStripped)) return 0.93;
 
     // Phonetic match — handles pronunciation discrepancies like Sean/Shawn, Sara/Sarah
     const spokenPhonetic = phoneticCode(spoken);
@@ -84,38 +108,73 @@ function nameSimilarity(spoken, actualName) {
     // Try matching individual words in the spoken phrase
     const words = spoken.split(/\s+/);
     let bestWordScore = 0;
+
+    const checkWord = (w) => {
+        if (w.length < 2) return;  // only skip single chars
+        // Try raw and suffix-stripped versions
+        for (const candidate of [w, stripSuffix(w)]) {
+            if (!candidate) continue;
+            // Direct Levenshtein
+            const dist = levenshtein(candidate, actualName);
+            const maxLen = Math.max(candidate.length, actualName.length);
+            const score = maxLen > 0 ? 1 - dist / maxLen : 0;
+            if (score > bestWordScore) bestWordScore = score;
+
+            // Also check against stripped name
+            if (nameStripped !== actualName) {
+                const dist2 = levenshtein(candidate, nameStripped);
+                const maxLen2 = Math.max(candidate.length, nameStripped.length);
+                const score2 = maxLen2 > 0 ? 1 - dist2 / maxLen2 : 0;
+                if (score2 > bestWordScore) bestWordScore = score2;
+            }
+
+            // Phonetic comparison per word
+            const wPhonetic = phoneticCode(candidate);
+            if (wPhonetic && namePhonetic && wPhonetic === namePhonetic) {
+                bestWordScore = Math.max(bestWordScore, 0.90);
+            }
+            // Partial phonetic: Levenshtein on phonetic codes
+            if (wPhonetic && namePhonetic) {
+                const pDist = levenshtein(wPhonetic, namePhonetic);
+                const pMax = Math.max(wPhonetic.length, namePhonetic.length);
+                const pScore = pMax > 0 ? 1 - pDist / pMax : 0;
+                if (pScore > 0.65) bestWordScore = Math.max(bestWordScore, pScore * 0.88);
+            }
+        }
+    };
+
+    // Check individual words
     for (const w of words) {
-        // Skip very short words — they cause false positives ("the", "can", etc.)
-        if (w.length < 3) continue;
-        // Direct Levenshtein on the word
-        const dist = levenshtein(w, actualName);
-        const maxLen = Math.max(w.length, actualName.length);
-        const score = maxLen > 0 ? 1 - dist / maxLen : 0;
-        if (score > bestWordScore) bestWordScore = score;
-
-        // Phonetic comparison per word
-        const wPhonetic = phoneticCode(w);
-        if (wPhonetic && namePhonetic && wPhonetic === namePhonetic) {
-            bestWordScore = Math.max(bestWordScore, 0.90);
-        }
-        // Partial phonetic: check Levenshtein on phonetic codes too
-        if (wPhonetic && namePhonetic) {
-            const pDist = levenshtein(wPhonetic, namePhonetic);
-            const pMax = Math.max(wPhonetic.length, namePhonetic.length);
-            const pScore = pMax > 0 ? 1 - pDist / pMax : 0;
-            if (pScore > 0.7) bestWordScore = Math.max(bestWordScore, pScore * 0.85);
-        }
+        checkWord(w);
     }
-    if (bestWordScore >= 0.6) return bestWordScore;
 
-    // Prefix match (first 3-4 chars) — only if name is 4+ chars to avoid short-name false positives
+    // Try joining adjacent words — speech API often splits names
+    // e.g. "and drew" → "andrew", "serve a" → "sarah"
+    for (let i = 0; i < words.length - 1; i++) {
+        checkWord(words[i] + words[i + 1]);           // no space: "and"+"drew" → "andrew"
+        checkWord(words[i] + ' ' + words[i + 1]);     // with space for multi-word names
+    }
+    // Try 3-word joins for longer names
+    for (let i = 0; i < words.length - 2; i++) {
+        checkWord(words[i] + words[i + 1] + words[i + 2]);
+    }
+
+    if (bestWordScore >= 0.55) return bestWordScore;
+
+    // Prefix match (first 3-4 chars) — only if name is 4+ chars
     const minLen = Math.min(spoken.length, actualName.length);
     if (minLen >= 4) {
         const p = Math.min(4, minLen);
         if (spoken.substring(0, p) === actualName.substring(0, p)) return 0.8;
     }
+    // Also check prefix on individual words
+    for (const w of words) {
+        if (w.length >= 3 && actualName.length >= 3) {
+            const p = Math.min(3, w.length, actualName.length);
+            if (w.substring(0, p) === actualName.substring(0, p)) return 0.7;
+        }
+    }
 
-    // No character overlap fallback — too many false positives
     return 0;
 }
 
@@ -172,6 +231,17 @@ window.hostStartGame = function () {
     socket.emit('start_game');
 };
 
+window.transferHost = function (playerName) {
+    if (myRole !== 'host') return;
+    socket.emit('transfer_host', {new_host_name: playerName});
+};
+
+window.returnToLobby = function () {
+    if (myRole !== 'host') return;
+    if (!confirm('Return everyone to the lobby? Progress will be reset.')) return;
+    socket.emit('return_to_lobby');
+};
+
 // ── Socket.IO listeners ───────────────────────────────────────
 
 socket.on('party_created', data => {
@@ -203,14 +273,27 @@ socket.on('party_joined', data => {
 
 socket.on('lobby_update', data => {
     partyPlayers = data.players;
+    // Update own role FIRST so the render uses the correct role
+    const me = partyPlayers.find(p => p.name === myName);
+    if (me) {
+        myRole = me.role;
+        document.getElementById('lobbyRole').textContent = myRole === 'host' ? 'Host' : 'Helper';
+        document.getElementById('startGameBtn').style.display = myRole === 'host' ? 'inline-block' : 'none';
+    }
     const list = document.getElementById('lobbyPlayerList');
     if (!list) return;
-    list.innerHTML = partyPlayers.map(p =>
-        `<div style="margin:4px 0;padding:8px 12px;background:${p.role==='host'?'#e3f2fd':'#f5f5f5'};border-radius:6px;">
+    list.innerHTML = partyPlayers.map(p => {
+        // Show "Make Host" button for the current host, on non-host players
+        const canTransfer = myRole === 'host' && p.role !== 'host';
+        const transferBtn = canTransfer
+            ? `<button onclick="transferHost('${p.name.replace(/'/g, "\\'")}')" style="float:right;padding:4px 10px;background:#ff9800;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;">Make Host</button>`
+            : '';
+        return `<div style="margin:4px 0;padding:8px 12px;background:${p.role==='host'?'#e3f2fd':'#f5f5f5'};border-radius:6px;">
+            ${transferBtn}
             <strong>${p.name}</strong> <span style="color:#888;font-size:13px;">(${p.role})</span>
             ${p.fact ? `<div style="font-size:12px;color:#666;margin-top:4px;">💡 ${p.fact}</div>` : ''}
-        </div>`
-    ).join('');
+        </div>`;
+    }).join('');
     // Build teamMembers from party (include facts)
     teamMembers = partyPlayers.map(p => ({name: p.name, fact: p.fact || ''}));
 });
@@ -221,6 +304,37 @@ socket.on('game_started', () => {
     correctAnswers = 0;
     showScreen('startOverlay');
     setupInstructionPage4();
+});
+
+socket.on('returned_to_lobby', data => {
+    // Stop any active game state
+    gameActive = false;
+    clearInterval(timerInterval);
+    stopVoiceListening();
+    if (audioElement) audioElement.pause();
+    // Reset game progress
+    currentRound = 1;
+    correctAnswers = 0;
+    helpEnabled = false;
+    permissionedPlayers = new Set();
+    // Reset instruction pages for next game
+    instructionPage = 1;
+    document.querySelectorAll('.instructionPage').forEach((el, i) => {
+        el.style.display = i === 0 ? 'block' : 'none';
+    });
+    // Hide the home button
+    const homeBtn = document.getElementById('homeBtn');
+    if (homeBtn) homeBtn.style.display = 'none';
+    // Update role in case host changed
+    if (data.your_role) {
+        myRole = data.your_role;
+    }
+    // Show the lobby
+    showScreen('lobbyOverlay');
+    document.getElementById('lobbyCode').textContent = partyCode;
+    document.getElementById('lobbyRole').textContent = myRole === 'host' ? 'Host' : 'Helper';
+    document.getElementById('startGameBtn').style.display = myRole === 'host' ? 'inline-block' : 'none';
+    showNotification('Returned to lobby — progress reset', '#2196F3');
 });
 
 function setupInstructionPage4() {
@@ -330,7 +444,9 @@ socket.on('round_result', data => {
 socket.on('help_requested', data => {
     const helperName = data.helper_name;
     const fromName = data.from;
-    // If I'm the one being called and I don't have access yet, enable me
+    // Skip entirely if the target already has permission (host or previously prompted)
+    if (permissionedPlayers.has(helperName.toLowerCase())) return;
+    // If I'm the one being called, I don't already have access, and I'm not the host — enable me
     if (!helpEnabled && myRole !== 'host') {
         const similarity = nameSimilarity(helperName, myName);
         if (similarity >= 0.5) {
@@ -339,9 +455,9 @@ socket.on('help_requested', data => {
             showNotification(`${fromName} asked for your help!`, '#FF9800');
         }
     }
-    // Everyone tracks who is now permissioned
+    // Track who now has permission (so nobody can be prompted twice)
     permissionedPlayers.add(helperName.toLowerCase());
-    // Host sees confirmation
+    // Notifications for players who can see the game
     if (myRole === 'host' || helpEnabled) {
         if (fromName !== myName) {
             showNotification(`${fromName} asked ${helperName} for help`, '#4CAF50');
@@ -355,6 +471,9 @@ socket.on('role_changed', data => {
     myRole = data.role;
     showNotification('You are now the Host!', '#2196F3');
     updateInputAccess();
+    // Show/hide home button based on new role
+    const homeBtn = document.getElementById('homeBtn');
+    if (homeBtn && gameActive) homeBtn.style.display = myRole === 'host' ? 'block' : 'none';
 });
 
 socket.on('error', data => {
@@ -383,7 +502,7 @@ function updateInputAccess() {
             lockMsg.style.cssText = 'text-align:center;padding:12px;background:#fff3e0;border:2px solid #ff9800;border-radius:8px;margin:10px 0;font-weight:bold;color:#e65100;';
             document.getElementById('challengeArea').appendChild(lockMsg);
         }
-        lockMsg.textContent = '🔒 Waiting for the host to call your name for help...';
+        lockMsg.textContent = '🔒 Waiting for a teammate to call your name for help...';
         lockMsg.style.display = 'block';
     } else if (lockMsg) {
         lockMsg.style.display = 'none';
@@ -576,6 +695,9 @@ socket.on('sync_start_game', () => {
     currentRound = 1;
     correctAnswers = 0;
     document.getElementById('correctCount').textContent = '0';
+    // Show home button for host only
+    const homeBtn = document.getElementById('homeBtn');
+    if (homeBtn) homeBtn.style.display = myRole === 'host' ? 'block' : 'none';
     startVoiceListening();
     startRound();
 });
@@ -838,48 +960,36 @@ socket.on('sync_input_update', data => {
 let _lastHelpName = '';
 let _lastHelpTime = 0;
 
-function handleVoiceCommand(transcript) {
+function handleVoiceCommand(transcript, isFinal) {
     if (voiceAnswerMode) {
         voiceAnswerText = transcript;
         document.getElementById('voiceAnswerDisplay').textContent = `You said: "${transcript}"`;
         return;
     }
     if (!gameActive) return;
-    // Only players who have access (permissioned) can request help
-    if (myRole === 'helper' && !helpEnabled) return;
+    // Only players who already have permission can prompt others
+    // Host always has permission; helpers only after being prompted this round
+    if (myRole !== 'host' && !helpEnabled) return;
 
     // Strip filler words that speech API may prepend
     const cleaned = transcript.toLowerCase()
-        .replace(/^(hey|yo|ok|okay|um|uh|like)\s+/i, '')
+        .replace(/^(hey|yo|ok|okay|um|uh|like|so|the|a)\s+/i, '')
         .trim();
-    const words = cleaned.split(/\s+/);
+    // Use lower threshold for final results (more reliable) vs interim (noisier)
+    const threshold = isFinal ? 0.55 : 0.62;
     let bestMatch = null;
-    let bestScore = 0.65;  // high threshold — must actually sound like the name
+    let bestScore = threshold;
 
     for (const member of teamMembers) {
         const memberLower = member.name.toLowerCase();
         // Skip yourself
         if (memberLower === myName.toLowerCase()) continue;
-        // Skip players who already have access
+        // Skip players who already have permission (host always has it)
         if (permissionedPlayers.has(memberLower)) continue;
 
-        // Try full cleaned transcript
-        const fullScore = nameSimilarity(cleaned, member.name);
-        if (fullScore > bestScore) { bestScore = fullScore; bestMatch = member.name; }
-
-        // Try individual words
-        for (const w of words) {
-            if (w.length < 3) continue;  // skip tiny words
-            const s = nameSimilarity(w, member.name);
-            if (s > bestScore) { bestScore = s; bestMatch = member.name; }
-        }
-
-        // Try two-word combinations for multi-word names
-        for (let i = 0; i < words.length - 1; i++) {
-            const combo = words[i] + ' ' + words[i + 1];
-            const cs = nameSimilarity(combo, member.name);
-            if (cs > bestScore) { bestScore = cs; bestMatch = member.name; }
-        }
+        // nameSimilarity already handles word splitting, joins, suffix stripping, etc.
+        const score = nameSimilarity(cleaned, member.name);
+        if (score > bestScore) { bestScore = score; bestMatch = member.name; }
     }
 
     if (bestMatch) {
@@ -902,6 +1012,16 @@ function showHelpRequest(playerName, confidence) {
 
 function startVoiceListening() {
     if (recognition && !isListening) {
+        // Update grammar hints with current team member names
+        if (recognition._grammarList && teamMembers.length > 0) {
+            try {
+                const names = teamMembers.map(m => m.name).join(' | ');
+                const grammar = '#JSGF V1.0; grammar names; public <name> = ' + names + ' ;';
+                recognition._grammarList = new (window.SpeechGrammarList || window.webkitSpeechGrammarList)();
+                recognition._grammarList.addFromString(grammar, 1);
+                recognition.grammars = recognition._grammarList;
+            } catch (_) {}
+        }
         isListening = true;
         try {
             recognition.start();
@@ -958,18 +1078,29 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     recognition = new SR();
     recognition.continuous = true;
     recognition.interimResults = true;   // process speech in real-time as user talks
-    recognition.maxAlternatives = 3;     // more chances to catch the name
+    recognition.maxAlternatives = 5;     // more chances to catch the name
     recognition.lang = 'en-US';
+
+    // Add grammar hints to bias recognition toward teammate names
+    if (typeof SpeechGrammarList !== 'undefined' || typeof webkitSpeechGrammarList !== 'undefined') {
+        try {
+            const SGL = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+            recognition._grammarList = new SGL();
+            // Grammar will be populated when team members are known
+        } catch (_) {}
+    }
+
     recognition.onresult = function (e) {
         // Check every result (interim and final) for a teammate name
         for (let i = e.resultIndex; i < e.results.length; i++) {
+            const isFinal = e.results[i].isFinal;
             const t = e.results[i][0].transcript.toLowerCase().trim();
-            console.log('Voice' + (e.results[i].isFinal ? ' (final)' : ' (interim)') + ':', t);
-            handleVoiceCommand(t);
+            console.log('Voice' + (isFinal ? ' (final)' : ' (interim)') + ':', t);
+            handleVoiceCommand(t, isFinal);
             // Also check alternative transcriptions
             for (let alt = 1; alt < e.results[i].length; alt++) {
                 const altText = e.results[i][alt].transcript.toLowerCase().trim();
-                if (altText !== t) handleVoiceCommand(altText);
+                if (altText !== t) handleVoiceCommand(altText, isFinal);
             }
         }
     };

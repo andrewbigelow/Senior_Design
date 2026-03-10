@@ -670,7 +670,7 @@ def handle_submit_answer(data):
 
 @socketio.on('request_help')
 def handle_request_help(data):
-    """Host asks a specific helper for help"""
+    """Host or permissioned player asks a specific helper for help"""
     info = player_sessions.get(request.sid)
     if not info:
         return
@@ -681,6 +681,58 @@ def handle_request_help(data):
         {'from': info['name'], 'helper_name': helper_name},
         room=code,
     )
+
+
+@socketio.on('transfer_host')
+def handle_transfer_host(data):
+    """Current host transfers host role to another player"""
+    info = player_sessions.get(request.sid)
+    if not info or info['role'] != 'host':
+        return
+    code = info['party_code']
+    party = parties.get(code)
+    if not party:
+        return
+    new_host_name = data.get('new_host_name', '')
+    # Find the target player by name
+    new_host_sid = None
+    for sid, p in party['players'].items():
+        if p['name'] == new_host_name:
+            new_host_sid = sid
+            break
+    if not new_host_sid or new_host_sid == request.sid:
+        return
+    # Demote current host
+    party['players'][request.sid]['role'] = 'helper'
+    player_sessions[request.sid]['role'] = 'helper'
+    # Promote new host
+    party['players'][new_host_sid]['role'] = 'host'
+    party['host_sid'] = new_host_sid
+    player_sessions[new_host_sid]['role'] = 'host'
+    _broadcast_lobby(code)
+
+
+@socketio.on('return_to_lobby')
+def handle_return_to_lobby():
+    """Host sends everyone back to the lobby and resets game progress"""
+    info = player_sessions.get(request.sid)
+    if not info or info['role'] != 'host':
+        return
+    code = info['party_code']
+    party = parties.get(code)
+    if not party:
+        return
+    # Reset party state
+    party['state'] = 'lobby'
+    party['round'] = 0
+    party['round_data'] = None
+    party['fact_rounds_done'] = 0
+    for sid in party['scores']:
+        party['scores'][sid] = 0
+    # Notify each player individually with their current role
+    for sid, p in party['players'].items():
+        socketio.emit('returned_to_lobby', {'your_role': p['role']}, room=sid)
+    _broadcast_lobby(code)
 
 
 @socketio.on('player_start_game')
