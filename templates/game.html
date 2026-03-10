@@ -580,7 +580,11 @@
             <div id="factQuestionArea" style="display:none; text-align:center; margin:20px 0; padding:30px; background:linear-gradient(135deg, #f3e5f5, #e8eaf6); border-radius:12px; border:2px solid #ab47bc;">
                 <h3 style="margin:0 0 15px 0; color:#6a1b9a; font-size:22px;">🧠 Teammate Quiz!</h3>
                 <p id="factQuestionText" style="font-size:18px; color:#333; margin:0 0 20px 0;"></p>
-                <input type="text" id="factAnswerInput" placeholder="Type your answer..." style="padding:14px 20px; font-size:18px; border:2px solid #ab47bc; border-radius:8px; width:300px; max-width:90%; text-align:center; outline:none;">
+                <div id="factChoicesArea" style="display:flex; flex-direction:column; gap:10px; margin-top:10px; max-width:420px; margin-left:auto; margin-right:auto;">
+    <!-- Populated by JS -->
+</div>
+<!-- Hidden input stores the selected choice for submission -->
+<input type="hidden" id="factAnswerInput" value="">
             </div>
 
             <!-- Voice Answer Section (hidden by default) -->

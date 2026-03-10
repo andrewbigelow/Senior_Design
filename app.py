@@ -461,14 +461,12 @@ def handle_request_round(data):
 
     party['round'] = current_round
 
-    # ── Teammate Fact Quiz Round (round 10, 15, 20, …) ──────────
+   # ── Teammate Fact Quiz Round (round 6, 10, 14, … i.e. 6 + every 4) ──
     num_players = len(party['players'])
-    max_fact_rounds = num_players - 1  # 2 players → 1 quiz, 3 → 2, etc.
     is_fact_round = (
-        current_round >= 10
-        and (current_round - 10) % 5 == 0
+        current_round >= 6
+        and (current_round - 6) % 4 == 0
         and num_players >= 2
-        and party.get('fact_rounds_done', 0) < max_fact_rounds
     )
     if is_fact_round:
         sids_with_facts = [
@@ -482,7 +480,6 @@ def handle_request_round(data):
             assignments = {}
             for i, sid in enumerate(sids_with_facts):
                 assignments[sid] = targets[i]
-            # Players without facts still participate
             for sid in all_sids:
                 if sid not in assignments:
                     available = [s for s in sids_with_facts if s != sid]
@@ -490,14 +487,41 @@ def handle_request_round(data):
                         random.choice(available) if available
                         else sids_with_facts[0]
                     )
+
+            # Load filler facts for multiple choice distractors
+            filler_facts = []
+            try:
+                with open('static/filler_facts.txt', 'r') as f:
+                    filler_facts = [
+                        line.strip() for line in f
+                        if line.strip()
+                    ]
+            except Exception as e:
+                print(f"[facts] Could not load filler_facts.txt: {e}")
+
             party['round_data'] = {
                 'round_type': 'fact',
                 'assignments': assignments,
             }
             party['fact_rounds_done'] = party.get('fact_rounds_done', 0) + 1
+
             for sid in all_sids:
                 target_sid = assignments[sid]
                 about = party['players'][target_sid]
+                correct_fact = about.get('fact', '')
+
+                # Build 3 distractors that aren't the correct answer
+                distractors = [
+                    f for f in filler_facts
+                    if f.lower() != correct_fact.lower()
+                ]
+                choices = random.sample(
+                    distractors,
+                    min(3, len(distractors))
+                )
+                choices.append(correct_fact)
+                random.shuffle(choices)
+
                 response = {
                     'round_type': 'fact',
                     'round': current_round,
@@ -507,6 +531,8 @@ def handle_request_round(data):
                             f"What fun fact did {about['name']} share "
                             f"about themselves?"
                         ),
+                        'choices': choices,
+                        'correct_answer': correct_fact,
                     },
                     'visual_task': None,
                     'audio_task': None,
@@ -576,7 +602,8 @@ def handle_submit_answer(data):
         if not assignment:
             return
         correct_fact = party['players'].get(assignment, {}).get('fact', '')
-        fact_correct = _check_fact_answer(fact_answer, correct_fact)
+        # Multiple choice — exact match is sufficient
+        fact_correct = fact_answer.lower() == correct_fact.lower()
         if fact_correct:
             party['scores'][request.sid] = (
                 party['scores'].get(request.sid, 0) + 1
