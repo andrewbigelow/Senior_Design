@@ -273,6 +273,13 @@ socket.on('party_joined', data => {
 
 socket.on('lobby_update', data => {
     partyPlayers = data.players;
+    // Update own role FIRST so the render uses the correct role
+    const me = partyPlayers.find(p => p.name === myName);
+    if (me) {
+        myRole = me.role;
+        document.getElementById('lobbyRole').textContent = myRole === 'host' ? 'Host' : 'Helper';
+        document.getElementById('startGameBtn').style.display = myRole === 'host' ? 'inline-block' : 'none';
+    }
     const list = document.getElementById('lobbyPlayerList');
     if (!list) return;
     list.innerHTML = partyPlayers.map(p => {
@@ -289,13 +296,6 @@ socket.on('lobby_update', data => {
     }).join('');
     // Build teamMembers from party (include facts)
     teamMembers = partyPlayers.map(p => ({name: p.name, fact: p.fact || ''}));
-    // Update own role in case it was changed
-    const me = partyPlayers.find(p => p.name === myName);
-    if (me) {
-        myRole = me.role;
-        document.getElementById('lobbyRole').textContent = myRole === 'host' ? 'Host' : 'Helper';
-        document.getElementById('startGameBtn').style.display = myRole === 'host' ? 'inline-block' : 'none';
-    }
 });
 
 socket.on('game_started', () => {
@@ -444,6 +444,8 @@ socket.on('round_result', data => {
 socket.on('help_requested', data => {
     const helperName = data.helper_name;
     const fromName = data.from;
+    // Skip entirely if the target already has permission (host or previously prompted)
+    if (permissionedPlayers.has(helperName.toLowerCase())) return;
     // If I'm the one being called, I don't already have access, and I'm not the host — enable me
     if (!helpEnabled && myRole !== 'host') {
         const similarity = nameSimilarity(helperName, myName);
