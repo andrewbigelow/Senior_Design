@@ -231,6 +231,17 @@ window.hostStartGame = function () {
     socket.emit('start_game');
 };
 
+window.transferHost = function (playerName) {
+    if (myRole !== 'host') return;
+    socket.emit('transfer_host', {new_host_name: playerName});
+};
+
+window.returnToLobby = function () {
+    if (myRole !== 'host') return;
+    if (!confirm('Return everyone to the lobby? Progress will be reset.')) return;
+    socket.emit('return_to_lobby');
+};
+
 // ── Socket.IO listeners ───────────────────────────────────────
 
 socket.on('party_created', data => {
@@ -264,14 +275,27 @@ socket.on('lobby_update', data => {
     partyPlayers = data.players;
     const list = document.getElementById('lobbyPlayerList');
     if (!list) return;
-    list.innerHTML = partyPlayers.map(p =>
-        `<div style="margin:4px 0;padding:8px 12px;background:${p.role==='host'?'#e3f2fd':'#f5f5f5'};border-radius:6px;">
+    list.innerHTML = partyPlayers.map(p => {
+        // Show "Make Host" button for the current host, on non-host players
+        const canTransfer = myRole === 'host' && p.role !== 'host';
+        const transferBtn = canTransfer
+            ? `<button onclick="transferHost('${p.name.replace(/'/g, "\\'")}')" style="float:right;padding:4px 10px;background:#ff9800;color:white;border:none;border-radius:4px;font-size:11px;cursor:pointer;">Make Host</button>`
+            : '';
+        return `<div style="margin:4px 0;padding:8px 12px;background:${p.role==='host'?'#e3f2fd':'#f5f5f5'};border-radius:6px;">
+            ${transferBtn}
             <strong>${p.name}</strong> <span style="color:#888;font-size:13px;">(${p.role})</span>
             ${p.fact ? `<div style="font-size:12px;color:#666;margin-top:4px;">💡 ${p.fact}</div>` : ''}
-        </div>`
-    ).join('');
+        </div>`;
+    }).join('');
     // Build teamMembers from party (include facts)
     teamMembers = partyPlayers.map(p => ({name: p.name, fact: p.fact || ''}));
+    // Update own role in case it was changed
+    const me = partyPlayers.find(p => p.name === myName);
+    if (me) {
+        myRole = me.role;
+        document.getElementById('lobbyRole').textContent = myRole === 'host' ? 'Host' : 'Helper';
+        document.getElementById('startGameBtn').style.display = myRole === 'host' ? 'inline-block' : 'none';
+    }
 });
 
 socket.on('game_started', () => {
@@ -280,6 +304,37 @@ socket.on('game_started', () => {
     correctAnswers = 0;
     showScreen('startOverlay');
     setupInstructionPage4();
+});
+
+socket.on('returned_to_lobby', data => {
+    // Stop any active game state
+    gameActive = false;
+    clearInterval(timerInterval);
+    stopVoiceListening();
+    if (audioElement) audioElement.pause();
+    // Reset game progress
+    currentRound = 1;
+    correctAnswers = 0;
+    helpEnabled = false;
+    permissionedPlayers = new Set();
+    // Reset instruction pages for next game
+    instructionPage = 1;
+    document.querySelectorAll('.instructionPage').forEach((el, i) => {
+        el.style.display = i === 0 ? 'block' : 'none';
+    });
+    // Hide the home button
+    const homeBtn = document.getElementById('homeBtn');
+    if (homeBtn) homeBtn.style.display = 'none';
+    // Update role in case host changed
+    if (data.your_role) {
+        myRole = data.your_role;
+    }
+    // Show the lobby
+    showScreen('lobbyOverlay');
+    document.getElementById('lobbyCode').textContent = partyCode;
+    document.getElementById('lobbyRole').textContent = myRole === 'host' ? 'Host' : 'Helper';
+    document.getElementById('startGameBtn').style.display = myRole === 'host' ? 'inline-block' : 'none';
+    showNotification('Returned to lobby — progress reset', '#2196F3');
 });
 
 function setupInstructionPage4() {
@@ -389,7 +444,7 @@ socket.on('round_result', data => {
 socket.on('help_requested', data => {
     const helperName = data.helper_name;
     const fromName = data.from;
-    // If I'm the one being called and I don't have access yet, enable me
+    // If I'm the one being called, I don't already have access, and I'm not the host — enable me
     if (!helpEnabled && myRole !== 'host') {
         const similarity = nameSimilarity(helperName, myName);
         if (similarity >= 0.5) {
@@ -398,9 +453,9 @@ socket.on('help_requested', data => {
             showNotification(`${fromName} asked for your help!`, '#FF9800');
         }
     }
-    // Everyone tracks who is now permissioned
+    // Track who now has permission (so nobody can be prompted twice)
     permissionedPlayers.add(helperName.toLowerCase());
-    // Host sees confirmation
+    // Notifications for players who can see the game
     if (myRole === 'host' || helpEnabled) {
         if (fromName !== myName) {
             showNotification(`${fromName} asked ${helperName} for help`, '#4CAF50');
@@ -414,6 +469,9 @@ socket.on('role_changed', data => {
     myRole = data.role;
     showNotification('You are now the Host!', '#2196F3');
     updateInputAccess();
+    // Show/hide home button based on new role
+    const homeBtn = document.getElementById('homeBtn');
+    if (homeBtn && gameActive) homeBtn.style.display = myRole === 'host' ? 'block' : 'none';
 });
 
 socket.on('error', data => {
@@ -442,7 +500,7 @@ function updateInputAccess() {
             lockMsg.style.cssText = 'text-align:center;padding:12px;background:#fff3e0;border:2px solid #ff9800;border-radius:8px;margin:10px 0;font-weight:bold;color:#e65100;';
             document.getElementById('challengeArea').appendChild(lockMsg);
         }
-        lockMsg.textContent = '🔒 Waiting for the host to call your name for help...';
+        lockMsg.textContent = '🔒 Waiting for a teammate to call your name for help...';
         lockMsg.style.display = 'block';
     } else if (lockMsg) {
         lockMsg.style.display = 'none';
@@ -587,6 +645,9 @@ socket.on('sync_start_game', () => {
     currentRound = 1;
     correctAnswers = 0;
     document.getElementById('correctCount').textContent = '0';
+    // Show home button for host only
+    const homeBtn = document.getElementById('homeBtn');
+    if (homeBtn) homeBtn.style.display = myRole === 'host' ? 'block' : 'none';
     startVoiceListening();
     startRound();
 });
@@ -856,8 +917,9 @@ function handleVoiceCommand(transcript, isFinal) {
         return;
     }
     if (!gameActive) return;
-    // Only players who have access (permissioned) can request help
-    if (myRole === 'helper' && !helpEnabled) return;
+    // Only players who already have permission can prompt others
+    // Host always has permission; helpers only after being prompted this round
+    if (myRole !== 'host' && !helpEnabled) return;
 
     // Strip filler words that speech API may prepend
     const cleaned = transcript.toLowerCase()
@@ -872,7 +934,7 @@ function handleVoiceCommand(transcript, isFinal) {
         const memberLower = member.name.toLowerCase();
         // Skip yourself
         if (memberLower === myName.toLowerCase()) continue;
-        // Skip players who already have access
+        // Skip players who already have permission (host always has it)
         if (permissionedPlayers.has(memberLower)) continue;
 
         // nameSimilarity already handles word splitting, joins, suffix stripping, etc.
