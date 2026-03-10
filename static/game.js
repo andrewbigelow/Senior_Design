@@ -444,17 +444,24 @@ socket.on('round_result', data => {
 socket.on('help_requested', data => {
     const helperName = data.helper_name;
     const fromName = data.from;
-    // Skip entirely if the target already has permission (host or previously prompted)
-    if (permissionedPlayers.has(helperName.toLowerCase())) return;
-    // If I'm the one being called, I don't already have access, and I'm not the host — enable me
+
+    // If I'm the one being called, enable me BEFORE the dedup check
+    // (my own name is in permissionedPlayers from resetRoundUI, so checking
+    //  the set first would incorrectly block my own enablement)
     if (!helpEnabled && myRole !== 'host') {
         const similarity = nameSimilarity(helperName, myName);
         if (similarity >= 0.5) {
             helpEnabled = true;
+            permissionedPlayers.add(helperName.toLowerCase());
             updateInputAccess();
             showNotification(`${fromName} asked for your help!`, '#FF9800');
+            return;
         }
     }
+
+    // Skip if the target already has permission (avoid duplicate prompts)
+    if (permissionedPlayers.has(helperName.toLowerCase())) return;
+
     // Track who now has permission (so nobody can be prompted twice)
     permissionedPlayers.add(helperName.toLowerCase());
     // Notifications for players who can see the game

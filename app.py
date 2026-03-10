@@ -305,17 +305,11 @@ def index():
 
 @app.route('/api/audio/<filename>')
 def serve_audio(filename):
-    """Serve an audio file, then delete it to keep things clean"""
+    """Serve an audio file (cleanup happens when new rounds generate audio)"""
     audio_path = Path(__file__).parent / filename
     if audio_path.exists():
-        # Read into memory so we can delete the file immediately
         with open(audio_path, 'rb') as f:
             audio_data = BytesIO(f.read())
-        try:
-            os.remove(audio_path)
-            print(f"[cleanup] Deleted audio file: {filename}")
-        except Exception as e:
-            print(f"[cleanup] Could not delete {filename}: {e}")
         return send_file(audio_data, mimetype='audio/mpeg', download_name=filename)
     return jsonify({'error': 'Audio file not found'}), 404
 
