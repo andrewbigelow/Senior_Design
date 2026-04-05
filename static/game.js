@@ -25,6 +25,7 @@ let lastRoundSuccess = false;
 
 // Team / voice
 let teamMembers = [];
+let hostName = '';            // track the current host
 let recognition = null;
 let isListening = false;
 let voiceAnswerMode = false;
@@ -273,6 +274,11 @@ socket.on('party_joined', data => {
 
 socket.on('lobby_update', data => {
     partyPlayers = data.players;
+    // Find and store the host name (needed for permission checks)
+    const hostPlayer = partyPlayers.find(p => p.role === 'host');
+    if (hostPlayer) {
+        hostName = hostPlayer.name;
+    }
     // Update own role FIRST so the render uses the correct role
     const me = partyPlayers.find(p => p.name === myName);
     if (me) {
@@ -556,6 +562,10 @@ function resetRoundUI() {
     // Reset permissions each round — only host starts with access
     permissionedPlayers = new Set();
     permissionedPlayers.add(myName.toLowerCase());
+    // Host always has permission, so add them to everyone's permissionedPlayers set
+    if (hostName) {
+        permissionedPlayers.add(hostName.toLowerCase());
+    }
 
     // Reset fact round UI
     const factArea = document.getElementById('factQuestionArea');
