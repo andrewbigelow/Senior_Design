@@ -641,6 +641,7 @@ def handle_request_round(data):
         'visual_task': visual_task,
         'audio_task': audio_task,
         'has_audio': has_audio,
+        'permissioned_players': [party['players'][party['host_sid']]['name']],  # Start with host
     }
 
     response = {
@@ -656,6 +657,7 @@ def handle_request_round(data):
         'difficulty': difficulty_level,
         'has_audio': has_audio,
         'round': current_round,
+        'permissioned_players': party['round_data']['permissioned_players'],
     }
     socketio.emit('round_data', response, room=code)
 
@@ -748,10 +750,34 @@ def handle_request_help(data):
     if not info:
         return
     code = info['party_code']
+    party = parties.get(code)
+    if not party or not party.get('round_data'):
+        return
+
+    requester_name = info['name']
     helper_name = data.get('helper_name', '')
+
+    permissioned = party['round_data'].get('permissioned_players', [])
+
+    # Check if requester has permission
+    if requester_name.lower() not in [p.lower() for p in permissioned]:
+        return
+
+    # Check if target already has permission (avoid duplicates)
+    if any(p.lower() == helper_name.lower() for p in permissioned):
+        return
+
+    # Add helper to permissioned players
+    party['round_data']['permissioned_players'].append(helper_name)
+
+    # Broadcast updated permissions to all players
     socketio.emit(
         'help_requested',
-        {'from': info['name'], 'helper_name': helper_name},
+        {
+            'from': requester_name,
+            'helper_name': helper_name,
+            'permissioned_players': party['round_data']['permissioned_players'],
+        },
         room=code,
     )
 

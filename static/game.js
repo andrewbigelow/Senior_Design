@@ -25,16 +25,15 @@ let lastRoundSuccess = false;
 
 // Team / voice
 let teamMembers = [];
-let hostName = '';            // track the current host
+let permissionedPlayers = []; // server-provided list of privileged player names
 let recognition = null;
 let isListening = false;
 let voiceAnswerMode = false;
 let voiceAnswerText = '';
 let playerCount = 2;          // legacy team setup support
-let helpEnabled = false;      // helper input enable flag
+let helpEnabled = false;      // helper input enable flag (for local UI state)
 let isSolo = false;           // single player mode
 let currentRoundType = 'normal'; // 'normal' | 'fact'
-let permissionedPlayers = new Set();  // names of players who currently have access
 
 // ── Levenshtein distance for fuzzy name matching ───────────────
 function levenshtein(a, b) {
@@ -274,11 +273,6 @@ socket.on('party_joined', data => {
 
 socket.on('lobby_update', data => {
     partyPlayers = data.players;
-    // Find and store the host name (needed for permission checks)
-    const hostPlayer = partyPlayers.find(p => p.role === 'host');
-    if (hostPlayer) {
-        hostName = hostPlayer.name;
-    }
     // Update own role FIRST so the render uses the correct role
     const me = partyPlayers.find(p => p.name === myName);
     if (me) {
@@ -327,7 +321,7 @@ socket.on('returned_to_lobby', data => {
     currentRound = 1;
     correctAnswers = 0;
     helpEnabled = false;
-    permissionedPlayers = new Set();
+    permissionedPlayers = [];
     // Reset instruction pages for next game
     instructionPage = 1;
     document.querySelectorAll('.instructionPage').forEach((el, i) => {
@@ -391,6 +385,11 @@ function setupInstructionPage4() {
 socket.on('round_data', data => {
     // Reset UI for all players (helpers didn't call startRound directly)
     resetRoundUI();
+
+    // Sync server-provided permissions list
+    if (data.permissioned_players) {
+        permissionedPlayers = data.permissioned_players;
+    }
 
     // Handle fact quiz rounds
     if (data.round_type === 'fact') {
@@ -456,26 +455,23 @@ socket.on('help_requested', data => {
     const helperName = data.helper_name;
     const fromName = data.from;
 
-    // If I'm the one being called, enable me BEFORE the dedup check
-    // (my own name is in permissionedPlayers from resetRoundUI, so checking
-    //  the set first would incorrectly block my own enablement)
+    // Update server-provided permissions list
+    if (data.permissioned_players) {
+        permissionedPlayers = data.permissioned_players;
+    }
+
+    // If I'm the one being called, enable me for input
     if (!helpEnabled && myRole !== 'host') {
         const similarity = nameSimilarity(helperName, myName);
         if (similarity >= 0.65) {
             helpEnabled = true;
-            permissionedPlayers.add(helperName.toLowerCase());
             updateInputAccess();
             showNotification(`${fromName} asked for your help!`, '#FF9800');
             return;
         }
     }
 
-    // Skip if the target already has permission (avoid duplicate prompts)
-    if (permissionedPlayers.has(helperName.toLowerCase())) return;
-
-    // Track who now has permission (so nobody can be prompted twice)
-    permissionedPlayers.add(helperName.toLowerCase());
-    // Notifications for players who can see the game
+    // Show notification only if requester can see the game (host or already has permission)
     if (myRole === 'host' || helpEnabled) {
         if (fromName !== myName) {
             showNotification(`${fromName} asked ${helperName} for help`, '#4CAF50');
@@ -559,13 +555,9 @@ function resetRoundUI() {
     selectedItems = [];
     helpEnabled = false;
     currentRoundType = 'normal';
-    // Reset permissions each round — only host starts with access
-    permissionedPlayers = new Set();
-    permissionedPlayers.add(myName.toLowerCase());
-    // Host always has permission, so add them to everyone's permissionedPlayers set
-    if (hostName) {
-        permissionedPlayers.add(hostName.toLowerCase());
-    }
+    // Permissions are now provided by server in round_data
+    // Initialize empty until server sends the list
+    permissionedPlayers = [];
 
     // Reset fact round UI
     const factArea = document.getElementById('factQuestionArea');
@@ -1018,8 +1010,8 @@ function handleVoiceCommand(transcript, isFinal) {
         const memberLower = member.name.toLowerCase();
         // Skip yourself
         if (memberLower === myName.toLowerCase()) continue;
-        // Skip players who already have permission (host always has it)
-        if (permissionedPlayers.has(memberLower)) continue;
+        // Skip players who already have permission (from server-provided list)
+        if (permissionedPlayers.some(p => p.toLowerCase() === memberLower)) continue;
 
         // nameSimilarity already handles word splitting, joins, suffix stripping, etc.
         const score = nameSimilarity(cleaned, member.name);
