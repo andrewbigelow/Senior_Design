@@ -453,6 +453,23 @@ def _check_fact_answer(answer, fact):
 
 # ── Socket.IO events ───────────────────────────────────────────
 
+@socketio.on('update_fact')
+def handle_update_fact(data):
+    """Player updates their fun fact"""
+    info = player_sessions.get(request.sid)
+    if not info:
+        return
+    code = info['party_code']
+    party = parties.get(code)
+    if not party:
+        return
+
+    fact = data.get('fact', '').strip()
+    party['players'][request.sid]['fact'] = fact
+    # Broadcast updated player list to all players
+    _broadcast_lobby(code)
+
+
 @socketio.on('create_party')
 def handle_create_party(data):
     name = data.get('name', 'Host').strip() or 'Host'

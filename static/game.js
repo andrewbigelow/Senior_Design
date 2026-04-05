@@ -279,6 +279,11 @@ socket.on('lobby_update', data => {
         myRole = me.role;
         document.getElementById('lobbyRole').textContent = myRole === 'host' ? 'Host' : 'Helper';
         document.getElementById('startGameBtn').style.display = myRole === 'host' ? 'inline-block' : 'none';
+        // Update the fact input field with current fact
+        const factInput = document.getElementById('lobbyFactInput');
+        if (factInput) {
+            factInput.value = me.fact || '';
+        }
     }
     const list = document.getElementById('lobbyPlayerList');
     if (!list) return;
@@ -1199,4 +1204,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter' && gameActive) submitAnswer();
 
     });
+    // Lobby fact input listener
+    const factInput = document.getElementById('lobbyFactInput');
+    if (factInput) {
+        factInput.addEventListener('change', () => {
+            socket.emit('update_fact', {fact: factInput.value});
+        });
+    }
 });
