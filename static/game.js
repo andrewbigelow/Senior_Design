@@ -450,7 +450,7 @@ socket.on('help_requested', data => {
     //  the set first would incorrectly block my own enablement)
     if (!helpEnabled && myRole !== 'host') {
         const similarity = nameSimilarity(helperName, myName);
-        if (similarity >= 0.5) {
+        if (similarity >= 0.65) {
             helpEnabled = true;
             permissionedPlayers.add(helperName.toLowerCase());
             updateInputAccess();
@@ -918,6 +918,18 @@ function generateContent(visualTask) {
             } else if (item.type === 'colored_box') {
                 itemDiv.style.background = item.color;
                 itemDiv.style.minHeight = '80px';
+            } else if (item.type === 'image') {
+                const img = document.createElement('img');
+                img.src = '/static/images/' + item.filename;
+                img.alt = item.filename;
+                img.onerror = function () {
+                    img.style.display = 'none';
+                    const fb = document.createElement('div');
+                    fb.textContent = '?';
+                    fb.style.fontSize = '24px';
+                    itemDiv.appendChild(fb);
+                };
+                itemDiv.appendChild(img);
             }
             grid.appendChild(itemDiv);
         });
@@ -983,7 +995,7 @@ function handleVoiceCommand(transcript, isFinal) {
         .replace(/^(hey|yo|ok|okay|um|uh|like|so|the|a)\s+/i, '')
         .trim();
     // Use lower threshold for final results (more reliable) vs interim (noisier)
-    const threshold = isFinal ? 0.55 : 0.62;
+    const threshold = isFinal ? 0.65 : 0.72;
     let bestMatch = null;
     let bestScore = threshold;
 

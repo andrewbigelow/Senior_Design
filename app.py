@@ -123,50 +123,112 @@ def generate_clipart_task(difficulty_level, num_items):
         'letter': letter
     }
 
+def load_color_images():
+    """Load color images from static/images/colored and group by color"""
+    image_dir = 'static/images/colored'
+    if not os.path.exists(image_dir):
+        return {}
+
+    image_files = [f for f in os.listdir(image_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
+
+    # Group images by color (extract from filename)
+    color_groups = {}
+    for filename in image_files:
+        # Extract color from filename: "red.png" -> "red", "red1.png" -> "red"
+        stem = Path(filename).stem
+        # Split on digits to get the base color name
+        color = ''.join(c for c in stem if not c.isdigit())
+        if color:
+            if color not in color_groups:
+                color_groups[color] = []
+            color_groups[color].append(filename)
+
+    return color_groups
+
 def generate_visual_task(difficulty_level, current_round=None):
     """Generate a visual task - randomly choose between different task types"""
     # Scale items based on difficulty
     base_items = 6
     items_per_level = 2
     num_items = base_items + (difficulty_level * items_per_level)
-    
+
     # Use scripted task type for first 5 rounds if round info provided
     if current_round and current_round in SCRIPTED_VISUAL_TASKS:
         task_type = SCRIPTED_VISUAL_TASKS[current_round]
     else:
         task_type = random.choice(VISUAL_TASK_TYPES)
-    
+
     if task_type == 'clipart_images':
         task = generate_clipart_task(difficulty_level, num_items)
         if task:
             return task
         # Fallback to another type if clipart fails
         task_type = 'number_count'
-    
+
     if task_type == 'color_count':
-        colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink']
-        color = random.choice(colors)
-        
+        color_groups = load_color_images()
+
+        # If we couldn't load images, fallback to colored boxes
+        if not color_groups:
+            colors = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink']
+            color = random.choice(colors)
+
+            items = []
+            items.append({'id': 0, 'color': color, 'type': 'colored_box'})
+            correct_count = 1
+
+            for i in range(1, num_items):
+                item_color = random.choice(colors)
+                items.append({'id': i, 'color': item_color, 'type': 'colored_box'})
+                if item_color == color:
+                    correct_count += 1
+
+            random.shuffle(items)
+            for i, item in enumerate(items):
+                item['id'] = i
+
+            return {
+                'type': 'color_count',
+                'instruction': f'Count all {color} colored items',
+                'items': items,
+                'correct_answer': correct_count,
+                'display_type': 'count'
+            }
+
+        # Select a target color and its images
+        target_color = random.choice(list(color_groups.keys()))
+        target_images = color_groups[target_color]
+
         items = []
-        # Ensure at least 1 correct answer by placing the target color first
-        items.append({'id': 0, 'color': color, 'type': 'colored_box'})
-        correct_count = 1
-        
-        for i in range(1, num_items):
-            item_color = random.choice(colors)
-            items.append({'id': i, 'color': item_color, 'type': 'colored_box'})
-            if item_color == color:
-                correct_count += 1
-        
+        correct_count = 0
+
+        # Add target color images
+        num_target = random.randint(max(1, num_items // 3), min(len(target_images), num_items - 1))
+        selected_target = random.sample(target_images, num_target)
+        for filename in selected_target:
+            items.append({'id': len(items), 'filename': f'colored/{filename}', 'type': 'image'})
+            correct_count += 1
+
+        # Fill remaining with non-target color images
+        other_colors = [c for c in color_groups.keys() if c != target_color]
+        remaining_slots = num_items - len(items)
+
+        while remaining_slots > 0 and other_colors:
+            other_color = random.choice(other_colors)
+            available = color_groups[other_color]
+            if available:
+                filename = random.choice(available)
+                items.append({'id': len(items), 'filename': f'colored/{filename}', 'type': 'image'})
+                remaining_slots -= 1
+
         # Shuffle to randomize position
         random.shuffle(items)
-        # Re-assign IDs after shuffle
         for i, item in enumerate(items):
             item['id'] = i
-        
+
         return {
             'type': 'color_count',
-            'instruction': f'Count all {color} colored items',
+            'instruction': f'Count all {target_color} images',
             'items': items,
             'correct_answer': correct_count,
             'display_type': 'count'
