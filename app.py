@@ -12,7 +12,7 @@ import audio_output
 import difficulty
 import word_generator
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 CORS(app)
 app.config['SECRET_KEY'] = 'cognitive-overload-secret'
 socketio = SocketIO(app, cors_allowed_origins="*")
