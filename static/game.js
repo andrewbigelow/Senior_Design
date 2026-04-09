@@ -159,7 +159,7 @@ function nameSimilarity(spoken, actualName) {
         checkWord(words[i] + words[i + 1] + words[i + 2]);
     }
 
-    if (bestWordScore >= 0.75) return bestWordScore;
+    if (bestWordScore >= 0.85) return bestWordScore;
 
     // Prefix match (first 3-4 chars) — only if name is 4+ chars
     const minLen = Math.min(spoken.length, actualName.length);
@@ -1001,8 +1001,8 @@ function handleVoiceCommand(transcript, isFinal) {
     const cleaned = transcript.toLowerCase()
         .replace(/^(hey|yo|ok|okay|um|uh|like|so|the|a)\s+/i, '')
         .trim();
-    // Use stricter thresholds to avoid false positives (final: 0.85, interim: 0.90)
-    const threshold = isFinal ? 0.85 : 0.90;
+    // Use very strict thresholds to avoid false positives (final: 0.92, interim: 0.95)
+    const threshold = isFinal ? 0.92 : 0.95;
     let bestMatch = null;
     let bestScore = threshold;
 
